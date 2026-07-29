@@ -884,7 +884,7 @@ aside select,
 
 /* ========== 新增图例样式 ========== */
 
-/* 禁飞区图例 - 红色斜条纹 */
+/* 禁飞区图例 - 与地图 restrictions 图层颜色一致 (#ff365e) */
 .legend .no-fly {
   display: inline-block;
   width: 20px;
@@ -893,38 +893,64 @@ aside select,
     -45deg,
     #ff365e 0px,
     #ff365e 4px,
-    transparent 4px,
-    transparent 8px
+    rgba(255, 54, 94, 0.25) 4px,
+    rgba(255, 54, 94, 0.25) 8px
   );
   border-radius: 4px;
-  border: 1px solid #ff365e;
+  border: 1.5px solid #ff365e;
   flex-shrink: 0;
+  box-shadow: 0 0 8px rgba(255, 54, 94, 0.25);
 }
 
-/* 车辆图标 - 带底色圆框 */
+/* 车辆图例 - 橙色渐变，与 dispatchGroundVehicle 标记一致 */
 .legend .vehicle-icon {
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
-  background: #f0a23c;
+  width: 22px;
+  height: 22px;
+  background: linear-gradient(135deg, #f5a623, #e07b1a);
   border-radius: 50%;
   font-size: 11px;
   font-style: normal;
-  border: 1px solid #ffffffaa;
+  border: 2px solid #ffffffcc;
   flex-shrink: 0;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  box-shadow: 0 2px 8px rgba(240, 162, 60, 0.35);
+}
+.legend .vehicle-icon::after {
+  content: "🚚";
+  line-height: 1;
 }
 
-/* 无人机图标 - 带底色圆框 */
+/* 无人机图例 - 蓝色渐变 + 发光边框，与 ensureFlightMarker 一致 */
 .legend .drone-icon {
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
-  background: #3a8fd4;
+  width: 22px;
+  height: 22px;
+  background: linear-gradient(135deg, #3a8fd4, #1a6b9e);
   border-radius: 50%;
   font-size: 11px;
   font-style: normal;
-  border: 1px solid #ffffffaa;
+  border: 2px solid #54eeff;
   flex-shrink: 0;
+  color: #fff;
+  text-shadow: 0 0 8px rgba(84, 238, 255, 0.5);
+  box-shadow: 0 0 16px rgba(84, 238, 255, 0.25);
+  animation: drone-pulse 2s ease-in-out infinite;
+}
+.legend .drone-icon::after {
+  content: "✈";
+  line-height: 1;
+}
+
+/* 无人机脉冲动画 - 与地图无人机一致 */
+@keyframes drone-pulse {
+  0%, 100% {
+    box-shadow: 0 0 16px rgba(84, 238, 255, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(84, 238, 255, 0.5);
+  }
 }
