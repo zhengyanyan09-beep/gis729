@@ -1557,24 +1557,30 @@ onBeforeUnmount(()=>{clearInterval(flightTimer);clearInterval(groundTimer);clear
         <div class="camera-hud glass">方向 {{mapBearing}}°　倾角 {{mapPitch}}°　缩放 {{mapZoom}}　·　{{poiLevel}}</div>
         <details class="layers glass"><summary>底图与图层</summary><label class="basemap-choice">地图风格<select v-model="basemap" @change="changeBasemap"><option v-for="(option,key) in basemapOptions" :key="key" :value="key">{{option.name}}</option></select></label><label class="remember-basemap"><input v-model="rememberBasemap" type="checkbox" @change="changeBasemapMemory">记住底图选择</label><div class="layer-divider">业务图层</div><label v-for="(_,key) in layerVisible" :key="key"><input v-model="layerVisible[key]" type="checkbox">{{({hospitals:'医院',supply:'供给机构',bases:'保障基地',coverage:'站点建议服务范围（仿真）',restrictions:'管制区',weather:'风向与风速',ground:'地面路线',air:'低空航线',buildings:'三维建筑'})[key]}}</label></details>
         <div class="legend glass">
-          <!-- 原有图例 -->
-          <span><i class="blue">✚</i>普通医院</span>
-          <span><i class="orange">✚</i>需求医院</span>
-          <span><i class="purple">✚</i>供给医院</span>
-          <span><i class="red">♥</i>血站</span>
-          <span><i class="green">H</i>无人机中心</span>
-          <span><i class="route reposition"></i>调机</span>
-          <span><i class="route delivery"></i>载货</span>
-          <span><i class="route returning"></i>返航</span>
+  <!-- 医疗机构 -->
+  <span><i class="blue">✚</i>普通医院</span>
+  <span><i class="orange">✚</i>需求医院</span>
+  <span><i class="purple">✚</i>供给医院</span>
+  <span><i class="red">♥</i>血站</span>
 
-          <!-- ========== 新增图例 ========== -->
-          <!-- 禁飞区图例 -->
-          <span><i class="no-fly"></i>禁飞区</span>
-          <!-- 车辆图例 -->
-          <span><i class="vehicle-icon">🚚</i>车辆</span>
-          <!-- 无人机图例 -->
-          <span><i class="drone-icon">✈</i>无人机</span>
-        </div>
+  <!-- 基础设施 -->
+  <span><i class="green">H</i>无人机中心</span>
+
+  <!-- 航线 -->
+  <span><i class="route reposition"></i>调机</span>
+  <span><i class="route delivery"></i>载货</span>
+  <span><i class="route returning"></i>返航</span>
+
+  <!-- ====== 新增图例 ====== -->
+  <!-- 禁飞区 - 与地图 restrictions 图层颜色一致 (#ff365e) -->
+  <span><i class="no-fly"></i>禁飞区</span>
+
+  <!-- 车辆 - 地面配送车辆 -->
+  <span><i class="vehicle-icon"></i>车辆</span>
+
+  <!-- 无人机 - 执行任务的无人机 -->
+  <span><i class="drone-icon"></i>无人机</span>
+</div>
         <div v-if="!capacityPage" class="weather-hud glass" :class="{collapsed:weatherCollapsed}"><div class="weather-title" @click="weatherCollapsed=!weatherCollapsed"><b>{{weather.temperature}}℃</b><span>{{displayedWind.label}} {{displayedWind.speed}}m/s</span><button>{{weatherCollapsed?'展开天气':'收起'}}</button></div><template v-if="!weatherCollapsed"><div class="wind-level"><button :class="{active:windLevel==='surface'}" @click="setWindLevel('surface')">地表10米</button><button :class="{active:windLevel==='lowair'}" @click="setWindLevel('lowair')">低空120米</button></div><p><span>适航判断 {{weatherAssessment.level}}</span><span>风的来向 {{displayedWind.direction}}°</span><span>阵风 {{weather.gust}}m/s</span><span>降水 {{weather.precipitation}}mm</span><span>能见度 {{weather.visibility}}km</span></p><small>{{weather.source}} · {{weather.updatedAt}} · 缩放或移动后按当前视窗重新采样</small><button class="weather-refresh" @click="refreshWeather">{{weatherLoading?'更新中':'更新天气'}}</button></template></div>
         <div v-if="canViewFlight&&page==='flight'" class="shared-flight-hud glass"><div><b>{{telemetryTask?.droneId}} · {{flightTelemetry.stage}}</b><span>{{telemetryTask?.supplier}} → {{telemetryTask?.requester}}</span></div><strong>{{flightTelemetry.progress}}%</strong><p><span>电量 {{flightTelemetry.battery}}%</span><span>高度 {{flightTelemetry.altitude}}m</span><span>速度 {{flightTelemetry.speed}}km/h</span><span>温度 {{flightTelemetry.temperature}}℃</span><span>ETA {{flightTelemetry.eta}}</span></p><small>实时位置 {{flightTelemetry.longitude}}, {{flightTelemetry.latitude}}</small></div>
       </section>
