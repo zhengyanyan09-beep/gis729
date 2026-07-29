@@ -780,15 +780,30 @@ function startWindAnimation(){
   else startGroundWindAnimation()
 }
 
-function windSampleAt(coordinates){
-  const samples=weatherGrid.value.length?weatherGrid.value:[weather.value]
-  let best=samples[0],bestDistance=Infinity
+function windVectorAt(coordinates){
+  const samples=(weatherGrid.value.length?weatherGrid.value:[weather.value]).filter(Boolean)
+  let east=0,north=0,totalWeight=0
   samples.forEach(sample=>{
-    if(!sample?.coordinates)return
-    const distance=(coordinates[0]-sample.coordinates[0])**2+(coordinates[1]-sample.coordinates[1])**2
-    if(distance<bestDistance){best=sample;bestDistance=distance}
+    const sampleCoordinates=sample.coordinates||[map.getCenter().lng,map.getCenter().lat]
+    const dx=(coordinates[0]-sampleCoordinates[0])*Math.cos(coordinates[1]*Math.PI/180)
+    const dy=coordinates[1]-sampleCoordinates[1]
+    const distanceSquared=dx*dx+dy*dy
+    const weight=1/Math.pow(distanceSquared+.000006,1.15)
+    const direction=windLevel.value==='surface'
+      ?(sample.groundWindDirection??sample.windDirection)
+      :sample.windDirection
+    const speed=Number(windLevel.value==='surface'
+      ?(sample.groundWindSpeed??sample.windSpeed)
+      :sample.windSpeed)||0
+    const flowBearing=((Number(direction)||0)+180)%360*Math.PI/180
+    east+=Math.sin(flowBearing)*speed*weight
+    north+=Math.cos(flowBearing)*speed*weight
+    totalWeight+=weight
   })
-  return best||weather.value
+  if(!totalWeight)return {east:0,north:1,speed:1}
+  east/=totalWeight
+  north/=totalWeight
+  return {east,north,speed:Math.hypot(east,north)}
 }
 
 function randomWindPoint(){
@@ -799,21 +814,27 @@ function randomWindPoint(){
   ]
 }
 
-function nextWindCoordinate(coordinates,sample){
-  const direction=windLevel.value==='surface'
-    ?(sample.groundWindDirection??sample.windDirection)
-    :sample.windDirection
-  const speed=windLevel.value==='surface'
-    ?(sample.groundWindSpeed??sample.windSpeed)
-    :sample.windSpeed
-  const bearing=((direction||0)+180)%360*Math.PI/180
+function nextWindCoordinate(coordinates,particle){
+  const target=windVectorAt(coordinates)
+  if(!Number.isFinite(particle.flowEast)){
+    particle.flowEast=target.east
+    particle.flowNorth=target.north
+  }else{
+    // 给风向增加惯性，使流线经过相邻气象网格时自然弯曲而不是折线转向。
+    particle.flowEast=particle.flowEast*.84+target.east*.16
+    particle.flowNorth=particle.flowNorth*.84+target.north*.16
+  }
+  const speed=Math.hypot(particle.flowEast,particle.flowNorth)
+  const magnitude=Math.max(.001,speed)
+  const east=particle.flowEast/magnitude
+  const north=particle.flowNorth/magnitude
   const latitude=map.getCenter().lat
   const kilometersPerPixel=156.543*Math.cos(latitude*Math.PI/180)/Math.pow(2,map.getZoom())
   const step=Math.max(.0006,kilometersPerPixel*Math.max(.7,Math.min(2.4,(speed||2)/3.6)))
   return {
     coordinates:[
-      coordinates[0]+Math.sin(bearing)*step/(111*Math.max(.3,Math.cos(coordinates[1]*Math.PI/180))),
-      coordinates[1]+Math.cos(bearing)*step/111
+      coordinates[0]+east*step/(111*Math.max(.3,Math.cos(coordinates[1]*Math.PI/180))),
+      coordinates[1]+north*step/111
     ],
     speed:Number(speed||0)
   }
@@ -840,6 +861,8 @@ function startGeoCanvasWindAnimation(){
     particle.coordinates=randomWindPoint()
     particle.age=0
     particle.max=80+Math.random()*90
+    particle.flowEast=undefined
+    particle.flowNorth=undefined
   }
   const tick=time=>{
     if(mapMode.value!=='2d'||!windCanvasVisible.value){
@@ -871,8 +894,7 @@ function startGeoCanvasWindAnimation(){
         resetParticle(particle)
         return
       }
-      const sample=windSampleAt(particle.coordinates)
-      const next=nextWindCoordinate(particle.coordinates,sample)
+      const next=nextWindCoordinate(particle.coordinates,particle)
       if(!bounds.contains(next.coordinates)){
         resetParticle(particle)
         return
@@ -900,19 +922,27 @@ function startGeoCanvasWindAnimation(){
 function startGroundWindAnimation(){
   if(!map?.isStyleLoaded())return
   const canvas=map.getCanvas()
-  const particleCount=Math.max(100,Math.round(canvas.clientWidth*canvas.clientHeight/5200))
+  const particleCount=Math.max(110,Math.round(canvas.clientWidth*canvas.clientHeight/5000))
   geoWindParticles=Array.from({length:particleCount},()=>{
     const coordinates=randomWindPoint()
     return {coordinates,trail:[coordinates],age:Math.random()*70,max:75+Math.random()*90}
   })
   if(map.getSource('weather-wind-3d'))map.getSource('weather-wind-3d').setData(turf.featureCollection([]))
   else map.addSource('weather-wind-3d',{type:'geojson',lineMetrics:true,data:turf.featureCollection([])})
+  if(!map.getLayer('weather-wind-3d-glow')){
+    map.addLayer({
+      id:'weather-wind-3d-glow',type:'line',source:'weather-wind-3d',minzoom:9,maxzoom:20,
+      layout:{'line-elevation-reference':'ground','line-cap':'round','line-join':'round'},
+      paint:{'line-z-offset':8,'line-width':3.4,'line-color':'#4ce2f4','line-opacity':.12,'line-blur':2}
+    })
+  }
   if(!map.getLayer('weather-wind-3d')){
     map.addLayer({
       id:'weather-wind-3d',type:'line',source:'weather-wind-3d',minzoom:9,maxzoom:20,
       layout:{'line-elevation-reference':'ground','line-cap':'round','line-join':'round'},
       paint:{
-        'line-width':1.15,
+        'line-z-offset':8,
+        'line-width':1.25,
         'line-gradient':['interpolate',['linear'],['line-progress'],
           0,'rgba(76,226,244,0)',.42,'rgba(76,226,244,.12)',.82,'rgba(76,226,244,.46)',1,'rgba(76,226,244,.78)']
       }
@@ -924,6 +954,8 @@ function startGroundWindAnimation(){
     particle.trail=[particle.coordinates]
     particle.age=0
     particle.max=75+Math.random()*90
+    particle.flowEast=undefined
+    particle.flowNorth=undefined
   }
   const tick=time=>{
     if(mapMode.value!=='3d'||!windCanvasVisible.value){
@@ -950,7 +982,7 @@ function startGroundWindAnimation(){
         resetParticle(particle)
         return
       }
-      const next=nextWindCoordinate(particle.coordinates,windSampleAt(particle.coordinates))
+      const next=nextWindCoordinate(particle.coordinates,particle)
       const segmentKm=turf.distance(turf.point(particle.coordinates),turf.point(next.coordinates),{units:'kilometers'})
       if(!bounds.contains(next.coordinates)||!Number.isFinite(segmentKm)||segmentKm>.45){
         resetParticle(particle)
@@ -958,7 +990,7 @@ function startGroundWindAnimation(){
       }
       particle.coordinates=next.coordinates
       particle.trail.push(next.coordinates)
-      if(particle.trail.length>11)particle.trail.shift()
+      if(particle.trail.length>14)particle.trail.shift()
       particle.age++
       if(particle.trail.length>1)features.push(turf.lineString([...particle.trail],{speed:next.speed}))
     })
@@ -1149,9 +1181,10 @@ function toggleRotate(){rotateMode.value=!rotateMode.value;applyRotateMode()}
 function showMessagePanel(){clearTimeout(messageHideTimer);showMessages.value=true}
 function hideMessagePanel(){clearTimeout(messageHideTimer);messageHideTimer=setTimeout(()=>showMessages.value=false,180)}
  function applyLayerVisibility(){
-   const pairs={coverage:['coverage'],restrictions:['restrictions'],weather:['weather-wind','weather-wind-3d','weather-wind-heads'],air:['air-glow','air-route','planned-flight-glow','planned-flight'],ground:['ground-traffic'],buildings:['buildings']}
+   const pairs={coverage:['coverage'],restrictions:['restrictions'],weather:['weather-wind','weather-wind-3d-glow','weather-wind-3d','weather-wind-heads'],air:['air-glow','air-route','planned-flight-glow','planned-flight'],ground:['ground-traffic'],buildings:['buildings']}
    Object.entries(pairs).forEach(([key,ids])=>ids.forEach(id=>map.getLayer(id)&&map.setLayoutProperty(id,'visibility',layerVisible.value[key]?'visible':'none')))
    if(map.getLayer('weather-wind'))map.setLayoutProperty('weather-wind','visibility','none')
+   if(map.getLayer('weather-wind-3d-glow'))map.setLayoutProperty('weather-wind-3d-glow','visibility',!capacityPage.value&&layerVisible.value.weather&&mapMode.value==='3d'?'visible':'none')
    if(map.getLayer('weather-wind-3d'))map.setLayoutProperty('weather-wind-3d','visibility',!capacityPage.value&&layerVisible.value.weather&&mapMode.value==='3d'?'visible':'none')
    if(map.getLayer('weather-wind-heads'))map.setLayoutProperty('weather-wind-heads','visibility','none')
    const flightPage=page.value==='flight',dispatchPage=page.value==='dispatch',groundPage=page.value==='groundMonitor'
