@@ -819,12 +819,12 @@ function windVectorAt(coordinates){
 
 function randomWindPoint(){
   const canvas=map.getCanvas()
-  const padding=8
-  const width=Math.max(1,canvas.clientWidth-padding*2)
-  const height=Math.max(1,canvas.clientHeight-padding*2)
+  const width=Math.max(1,canvas.clientWidth)
+  const height=Math.max(1,canvas.clientHeight)
+  const overscan=.16
   const point=map.unproject([
-    padding+Math.random()*width,
-    padding+Math.random()*height
+    (-overscan+Math.random()*(1+overscan*2))*width,
+    (-overscan+Math.random()*(1+overscan*2))*height
   ])
   return [point.lng,point.lat]
 }
@@ -839,11 +839,20 @@ function screenWindPoint(index,count){
   const row=Math.floor(index/columns)
   const jitterX=(Math.random()-.5)*.46
   const jitterY=(Math.random()-.5)*.46
+  const overscan=.14
   const point=map.unproject([
-    Math.max(4,Math.min(width-4,(column+.5+jitterX)*width/columns)),
-    Math.max(4,Math.min(height-4,(row+.5+jitterY)*height/rows))
+    (-overscan+(column+.5+jitterX)/columns*(1+overscan*2))*width,
+    (-overscan+(row+.5+jitterY)/rows*(1+overscan*2))*height
   ])
   return [point.lng,point.lat]
+}
+
+function windPointInOverscan(coordinates,margin=180){
+  const canvas=map.getCanvas()
+  const point=map.project(coordinates)
+  return Number.isFinite(point.x)&&Number.isFinite(point.y)&&
+    point.x>=-margin&&point.x<=canvas.clientWidth+margin&&
+    point.y>=-margin&&point.y<=canvas.clientHeight+margin
 }
 
 function nextWindCoordinate(coordinates,particle){
@@ -925,14 +934,13 @@ function startGeoCanvasWindAnimation(){
     ctx.fillStyle='rgba(0,0,0,.91)'
     ctx.fillRect(0,0,rect.width,rect.height)
     ctx.globalCompositeOperation='source-over'
-    const bounds=map.getBounds()
     windParticles.forEach(particle=>{
-      if(particle.age>particle.max||!bounds.contains(particle.coordinates)){
+      if(particle.age>particle.max||!windPointInOverscan(particle.coordinates)){
         resetParticle(particle)
         return
       }
       const next=nextWindCoordinate(particle.coordinates,particle)
-      if(!bounds.contains(next.coordinates)){
+      if(!windPointInOverscan(next.coordinates)){
         resetParticle(particle)
         return
       }
@@ -974,7 +982,7 @@ function startGroundWindAnimation(){
     map.addLayer({
       id:'weather-wind-3d-glow',type:'line',source:'weather-wind-3d',minzoom:9,maxzoom:20,
       layout:{'line-elevation-reference':'ground','line-cap':'round','line-join':'round'},
-      paint:{'line-z-offset':18,'line-width':4.6,'line-color':'#4ce2f4','line-opacity':.22,'line-blur':2}
+      paint:{'line-width':5.2,'line-color':'#4ce2f4','line-opacity':.3,'line-blur':2.2}
     })
   }
   if(!map.getLayer('weather-wind-3d')){
@@ -982,7 +990,6 @@ function startGroundWindAnimation(){
       id:'weather-wind-3d',type:'line',source:'weather-wind-3d',minzoom:9,maxzoom:20,
       layout:{'line-elevation-reference':'ground','line-cap':'round','line-join':'round'},
       paint:{
-        'line-z-offset':18,
         'line-width':1.65,
         'line-emissive-strength':1,
         'line-gradient':['interpolate',['linear'],['line-progress'],
@@ -1022,15 +1029,15 @@ function startGroundWindAnimation(){
       windAnimation=requestAnimationFrame(tick)
       return
     }
-    const bounds=map.getBounds(),features=[]
+    const features=[]
     geoWindParticles.forEach(particle=>{
-      if(particle.age>particle.max||!bounds.contains(particle.coordinates)){
+      if(particle.age>particle.max||!windPointInOverscan(particle.coordinates)){
         resetParticle(particle)
         return
       }
       const next=nextWindCoordinate(particle.coordinates,particle)
       const segmentKm=turf.distance(turf.point(particle.coordinates),turf.point(next.coordinates),{units:'kilometers'})
-      if(!bounds.contains(next.coordinates)||!Number.isFinite(segmentKm)||segmentKm>.45){
+      if(!windPointInOverscan(next.coordinates)||!Number.isFinite(segmentKm)||segmentKm>.45){
         resetParticle(particle)
         return
       }
