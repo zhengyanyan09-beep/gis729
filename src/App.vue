@@ -1041,7 +1041,7 @@ function changeBasemapMemory(){
  function updateWindVisibility(){
    if(!map)return
    const c=map.getCenter(),z=map.getZoom()
-   windCanvasVisible.value=!capacityPage.value&&layerVisible.value.weather&&mapMode.value==='2d'&&z>=8.8&&z<=18&&c.lng>=121.0&&c.lng<=121.9&&c.lat>=30.7&&c.lat<=31.7
+   windCanvasVisible.value=!capacityPage.value&&layerVisible.value.weather&&z>=8.8&&z<=18&&c.lng>=121.0&&c.lng<=121.9&&c.lat>=30.7&&c.lat<=31.7
  }
 
 
@@ -1153,11 +1153,25 @@ function updateMapData(){
 }
 function focusTask(){if(!activeTask.value)return;const b=new mapboxgl.LngLatBounds();b.extend(activeTask.value.destination);if(selectedSupplier.value)b.extend(selectedSupplier.value.coordinates);map.fitBounds(b,{padding:110,maxZoom:14})}
 function setMapView(mode){
+  if(!map)return
+  const currentCenter=map.getCenter()
+  const currentZoom=map.getZoom()
+  const currentBearing=map.getBearing()
   mapMode.value=mode
-  if(mode==='3d')map.easeTo({pitch:62,zoom:Math.max(15,map.getZoom()),duration:800})
-  else map.easeTo({center:[121.47,31.18],pitch:0,bearing:0,zoom:9.45,duration:700})
+  map.easeTo({
+    center:currentCenter,
+    zoom:currentZoom,
+    bearing:currentBearing,
+    pitch:mode==='3d'?58:0,
+    duration:650
+  })
   updateWindVisibility()
-  nextTick(startWindAnimation)
+  applyLayerVisibility()
+  map.once('moveend',()=>{
+    updateWindVisibility()
+    applyLayerVisibility()
+    startWindAnimation()
+  })
 }
 function resetNorth(){map.easeTo({bearing:0,pitch:mapMode.value==='3d'?55:0,duration:500})}
 function applyRotateMode(){
