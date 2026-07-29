@@ -252,6 +252,8 @@ const bufferedRestrictions=()=>restrictions
   .map(zone=>turf.buffer(turf.polygon(zone.coordinates),routeSafetyBufferKm,{units:'kilometers'}))
   .filter(Boolean)
 const segmentDistance=(a,b)=>turf.distance(turf.point(a),turf.point(b),{units:'kilometers'})
+const routeHasConflict=route=>!route||route.properties?.safe===false||
+  bufferedRestrictions().some(zone=>turf.booleanIntersects(route,zone))
 function buildSafeLeg(from,to){
   const obstacles=bufferedRestrictions()
   const clear=(a,b)=>!obstacles.some(polygon=>turf.booleanIntersects(turf.lineString([a,b]),polygon))
@@ -323,7 +325,7 @@ const safeAirLine = computed(()=>{
   return buildSafeLeg(a,b)
 })
 const airLine = computed(()=>selectedRoute.value==='direct'?directAirLine.value:safeAirLine.value)
-const routeIsSafe = computed(()=>selectedRoute.value!=='direct'&&airLine.value?.properties?.safe!==false&&!bufferedRestrictions().some(zone=>turf.booleanIntersects(airLine.value,zone)))
+const routeIsSafe = computed(()=>selectedRoute.value!=='direct'&&!routeHasConflict(airLine.value))
 const airKm=computed(()=>airLine.value?turf.length(airLine.value,{units:'kilometers'}):0)
 const airMinutes=computed(()=>Math.max(4,Math.round(airKm.value/.72+3)))
 
@@ -527,7 +529,16 @@ function issueTask(){
   if(!routeIsSafe.value){toast('当前航线仍与禁飞区冲突，禁止下发无人机任务');return}
   const dispatchDrone=selectedDrone.value,dispatchBase=stations.find(s=>s.id===dispatchDrone?.baseId)||stations[0]
   const plannedStops=[dispatchBase.coordinates,selectedSupplier.value.coordinates,t.destination,...coRouteCandidates.value.filter(x=>selectedBatchTaskIds.value.includes(x.id)).map(x=>x.destination)]
-  if(plannedStops.slice(0,-1).some((point,index)=>buildSafeLeg(point,plannedStops[index+1]).properties.safe===false)){toast('完整航线中仍有航段无法避开禁飞区，禁止下发');return}
+  const returnCandidates=stations
+    .map(station=>({station,route:buildSafeLeg(plannedStops.at(-1),station.coordinates)}))
+    .filter(item=>!routeHasConflict(item.route))
+    .sort((a,b)=>a.route.properties.distanceKm-b.route.properties.distanceKm)
+  if(!returnCandidates.length){toast('没有可安全抵达的返航基地，禁止下发');return}
+  plannedStops.push(returnCandidates[0].station.coordinates)
+  if(plannedStops.slice(0,-1).some((point,index)=>routeHasConflict(buildSafeLeg(point,plannedStops[index+1])))){
+    toast('完整航线中存在穿越禁飞区的航段，已禁止下发')
+    return
+  }
   const reservedPartner=coRouteCandidates.value.find(x=>selectedBatchTaskIds.value.includes(x.id)&&x.droneId&&['已下发·等待运营中心放飞','调度方案已确认·等待放飞'].includes(x.status))
   if(reservedPartner){
     const root=reservedPartner.batchParentId?tasks.value.find(x=>x.id===reservedPartner.batchParentId):tasks.value.find(x=>x.id===reservedPartner.id)
@@ -1200,7 +1211,8 @@ function updateLabelScale(){
 }
 function updateMapData(){
   if(!map?.isStyleLoaded())return
-  if(airLine.value){addSource('air-route',airLine.value);if(!map.getLayer('air-glow'))map.addLayer({id:'air-glow',type:'line',source:'air-route',layout:{'line-elevation-reference':'ground'},paint:{'line-z-offset':120,'line-color':'#3de7ff','line-width':10,'line-opacity':.18}});if(!map.getLayer('air-route'))map.addLayer({id:'air-route',type:'line',source:'air-route',layout:{'line-elevation-reference':'ground'},paint:{'line-z-offset':120,'line-color':'#65f4ff','line-width':4,'line-dasharray':[2,1]}})}
+  if(routeIsSafe.value){addSource('air-route',airLine.value);if(!map.getLayer('air-glow'))map.addLayer({id:'air-glow',type:'line',source:'air-route',layout:{'line-elevation-reference':'ground'},paint:{'line-z-offset':120,'line-color':'#3de7ff','line-width':10,'line-opacity':.18}});if(!map.getLayer('air-route'))map.addLayer({id:'air-route',type:'line',source:'air-route',layout:{'line-elevation-reference':'ground'},paint:{'line-z-offset':120,'line-color':'#65f4ff','line-width':4,'line-dasharray':[2,1]}})}
+  else map.getSource('air-route')?.setData(turf.featureCollection([]))
 }
 function focusTask(){if(!activeTask.value)return;const b=new mapboxgl.LngLatBounds();b.extend(activeTask.value.destination);if(selectedSupplier.value)b.extend(selectedSupplier.value.coordinates);map.fitBounds(b,{padding:110,maxZoom:14})}
 function setMapView(mode){
@@ -1314,6 +1326,11 @@ function showPlannedRoute(task){
     )),
     annotateLeg(buildSafeLeg(deliveryStops.at(-1),returnBase.coordinates),'return','最后需求医院→返航基地')
   ]
+  if(features.some(routeHasConflict)){
+    addSource('planned-flight',turf.featureCollection([]))
+    toast('完整航线存在禁飞区冲突，已停止展示并禁止执行')
+    return
+  }
   const route=turf.featureCollection(features)
   addSource('planned-flight',route)
   if(!map.getLayer('planned-flight-glow'))map.addLayer({id:'planned-flight-glow',type:'line',source:'planned-flight',layout:{'line-elevation-reference':'ground'},paint:{'line-z-offset':120,'line-color':'#43e8ff','line-width':13,'line-opacity':.16}})
@@ -1399,8 +1416,8 @@ function renderRemoteDrone(){
   mapMode.value='3d'
   const task=telemetryTask.value,supplier=inventory.value.find(x=>x.orgId===task?.supplierId)
   if(task&&supplier){
-    const sharedRoute=turf.lineString([supplier.coordinates,task.destination])
-    addSource('shared-flight-route',sharedRoute)
+    const sharedRoute=buildSafeLeg(supplier.coordinates,task.destination)
+    addSource('shared-flight-route',routeHasConflict(sharedRoute)?turf.featureCollection([]):sharedRoute)
     if(!map.getLayer('shared-flight-glow'))map.addLayer({id:'shared-flight-glow',type:'line',source:'shared-flight-route',layout:{'line-elevation-reference':'ground'},paint:{'line-z-offset':120,'line-color':'#45efff','line-width':12,'line-opacity':.18}})
     if(!map.getLayer('shared-flight-route'))map.addLayer({id:'shared-flight-route',type:'line',source:'shared-flight-route',layout:{'line-elevation-reference':'ground'},paint:{'line-z-offset':120,'line-color':'#7cf7ff','line-width':4,'line-dasharray':[2,1]}})
   }
