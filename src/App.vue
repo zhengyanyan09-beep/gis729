@@ -248,15 +248,28 @@ const directAirLine = computed(()=>{
   return turf.lineString([selectedSupplier.value.coordinates,activeTask.value.destination])
 })
 const routeSafetyBufferKm=.25
+const hardRestrictions=()=>restrictions.map(zone=>turf.polygon(zone.coordinates))
 const bufferedRestrictions=()=>restrictions
   .map(zone=>turf.buffer(turf.polygon(zone.coordinates),routeSafetyBufferKm,{units:'kilometers',steps:2}))
   .filter(Boolean)
 const segmentDistance=(a,b)=>turf.distance(turf.point(a),turf.point(b),{units:'kilometers'})
 const routeHasConflict=route=>!route||route.properties?.safe===false||
-  bufferedRestrictions().some(zone=>turf.booleanIntersects(route,zone))
+  hardRestrictions().some(zone=>turf.booleanIntersects(route,zone))
 function buildSafeLeg(from,to){
+  const hardObstacles=hardRestrictions()
   const obstacles=bufferedRestrictions()
-  const clear=(a,b)=>!obstacles.some(polygon=>turf.booleanIntersects(turf.lineString([a,b]),polygon))
+  const clear=(a,b)=>{
+    const line=turf.lineString([a,b])
+    // 红色禁飞区是绝对硬约束，任何航段都不能相交。
+    if(hardObstacles.some(polygon=>turf.booleanIntersects(line,polygon)))return false
+    // 安全缓冲带用于优先避让；若医院本身位于缓冲带内，则允许从该端点向外离开。
+    return !obstacles.some(polygon=>{
+      if(!turf.booleanIntersects(line,polygon))return false
+      const endpointInside=turf.booleanPointInPolygon(turf.point(a),polygon)||
+        turf.booleanPointInPolygon(turf.point(b),polygon)
+      return !endpointInside
+    })
+  }
   const directKm=segmentDistance(from,to)
   if(clear(from,to))return turf.lineString([from,to],{
     safe:true,blocked:false,distanceKm:directKm,directKm,detourKm:0,
@@ -334,7 +347,7 @@ function buildSafeLeg(from,to){
     algorithm:'visibility-graph-a-star',safetyBufferKm:routeSafetyBufferKm
   })
 }
-const directRouteBlocked = computed(()=>directAirLine.value?bufferedRestrictions().some(zone=>turf.booleanIntersects(directAirLine.value,zone)):false)
+const directRouteBlocked = computed(()=>directAirLine.value?hardRestrictions().some(zone=>turf.booleanIntersects(directAirLine.value,zone)):false)
 const safeAirLine = computed(()=>{
   if(!directAirLine.value)return null
   const [a,b]=[directAirLine.value.geometry.coordinates[0],directAirLine.value.geometry.coordinates.at(-1)]
