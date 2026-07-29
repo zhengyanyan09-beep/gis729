@@ -249,7 +249,7 @@ const directAirLine = computed(()=>{
 })
 const routeSafetyBufferKm=.25
 const bufferedRestrictions=()=>restrictions
-  .map(zone=>turf.buffer(turf.polygon(zone.coordinates),routeSafetyBufferKm,{units:'kilometers'}))
+  .map(zone=>turf.buffer(turf.polygon(zone.coordinates),routeSafetyBufferKm,{units:'kilometers',steps:2}))
   .filter(Boolean)
 const segmentDistance=(a,b)=>turf.distance(turf.point(a),turf.point(b),{units:'kilometers'})
 const routeHasConflict=route=>!route||route.properties?.safe===false||
@@ -263,23 +263,39 @@ function buildSafeLeg(from,to){
     algorithm:'visibility-graph-a-star',safetyBufferKm:routeSafetyBufferKm
   })
 
-  // 使用禁飞区原始顶点向外偏移生成候选绕行点，适用于矩形与不规则多边形。
+  // 使用“扩大后的禁飞区边界顶点”建立可视图，候选点本身位于安全边界之外。
   const nodes=[from,to]
-  restrictions.forEach(zone=>{
-    const polygon=turf.polygon(zone.coordinates)
-    const center=turf.centroid(polygon)
-    const rings=zone.coordinates||[]
-    rings.forEach(ring=>ring.slice(0,-1).forEach(vertex=>{
+  obstacles.forEach(obstacle=>{
+    const center=turf.centroid(obstacle)
+    const polygons=obstacle.geometry.type==='MultiPolygon'
+      ?obstacle.geometry.coordinates
+      :[obstacle.geometry.coordinates]
+    polygons.forEach(rings=>rings.forEach(ring=>ring.slice(0,-1).forEach(vertex=>{
       const bearing=turf.bearing(center,turf.point(vertex))
       const escaped=turf.destination(
         turf.point(vertex),
-        routeSafetyBufferKm+.06,
+        .06,
         bearing,
         {units:'kilometers'}
       ).geometry.coordinates
       if(!obstacles.some(obstacle=>turf.booleanPointInPolygon(turf.point(escaped),obstacle)))nodes.push(escaped)
-    }))
+    })))
   })
+
+  // 增加所有禁飞区外围的四个兜底节点。即使多个禁飞区相邻，也能从整体外侧绕行。
+  if(obstacles.length){
+    const obstacleCollection=turf.featureCollection(obstacles)
+    const [west,south,east,north]=turf.bbox(obstacleCollection)
+    const middleLatitude=(south+north)/2
+    const latitudePadding=.8/111
+    const longitudePadding=.8/(111*Math.max(.2,Math.cos(middleLatitude*Math.PI/180)))
+    nodes.push(
+      [west-longitudePadding,south-latitudePadding],
+      [west-longitudePadding,north+latitudePadding],
+      [east+longitudePadding,north+latitudePadding],
+      [east+longitudePadding,south-latitudePadding]
+    )
+  }
 
   // 去除距离过近的重复节点，降低可视图的连边数量。
   const uniqueNodes=nodes.filter((node,index,list)=>list.findIndex(other=>segmentDistance(node,other)<.015)===index)
