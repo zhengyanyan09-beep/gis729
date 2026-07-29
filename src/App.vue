@@ -123,7 +123,7 @@ let currentOrgFocused=false
 let semanticMarkers=[]
 const autoOpenedFlightTasks=new Set()
 let windAnimation=0,windParticles=[],geoWindParticles=[]
-let weatherRefreshTimer,lastWeatherGridKey=''
+let weatherRefreshTimer,windRestartTimer,lastWeatherGridKey=''
 const syncChannel = typeof BroadcastChannel!=='undefined' ? new BroadcastChannel('air-medical-live-v3') : null
 function postSync(extra={}){
   if(!syncChannel)return
@@ -780,6 +780,17 @@ function startWindAnimation(){
   else startGroundWindAnimation()
 }
 
+function restartWindForSettledView(){
+  clearTimeout(windRestartTimer)
+  updateWindVisibility()
+  if(!windCanvasVisible.value)return
+  requestAnimationFrame(startWindAnimation)
+  windRestartTimer=setTimeout(()=>{
+    updateWindVisibility()
+    if(windCanvasVisible.value)startWindAnimation()
+  },180)
+}
+
 function windVectorAt(coordinates){
   const samples=(weatherGrid.value.length?weatherGrid.value:[weather.value]).filter(Boolean)
   let east=0,north=0,totalWeight=0
@@ -814,6 +825,23 @@ function randomWindPoint(){
   const point=map.unproject([
     padding+Math.random()*width,
     padding+Math.random()*height
+  ])
+  return [point.lng,point.lat]
+}
+
+function screenWindPoint(index,count){
+  const canvas=map.getCanvas()
+  const width=Math.max(1,canvas.clientWidth)
+  const height=Math.max(1,canvas.clientHeight)
+  const columns=Math.max(1,Math.ceil(Math.sqrt(count*width/height)))
+  const rows=Math.max(1,Math.ceil(count/columns))
+  const column=index%columns
+  const row=Math.floor(index/columns)
+  const jitterX=(Math.random()-.5)*.46
+  const jitterY=(Math.random()-.5)*.46
+  const point=map.unproject([
+    Math.max(4,Math.min(width-4,(column+.5+jitterX)*width/columns)),
+    Math.max(4,Math.min(height-4,(row+.5+jitterY)*height/rows))
   ])
   return [point.lng,point.lat]
 }
@@ -856,10 +884,12 @@ function startGeoCanvasWindAnimation(){
   ctx.setTransform(ratio,0,0,ratio,0,0)
   ctx.lineWidth=1.15
   ctx.lineCap='round'
-  windParticles=Array.from(
-    {length:Math.max(180,Math.round(rect.width*rect.height/3400))},
-    ()=>({coordinates:randomWindPoint(),age:Math.random()*80,max:80+Math.random()*90})
-  )
+  const particleCount=Math.max(180,Math.round(rect.width*rect.height/3400))
+  windParticles=Array.from({length:particleCount},(_,index)=>({
+    coordinates:screenWindPoint(index,particleCount),
+    age:Math.random()*40,
+    max:100+Math.random()*90
+  }))
   let cameraKey='',last=0
   const resetParticle=particle=>{
     particle.coordinates=randomWindPoint()
@@ -883,7 +913,10 @@ function startGeoCanvasWindAnimation(){
     if(nextCameraKey!==cameraKey){
       cameraKey=nextCameraKey
       ctx.clearRect(0,0,rect.width,rect.height)
-      windParticles.forEach(resetParticle)
+      windParticles.forEach((particle,index)=>{
+        resetParticle(particle)
+        particle.coordinates=screenWindPoint(index,windParticles.length)
+      })
       windAnimation=requestAnimationFrame(tick)
       return
     }
@@ -924,11 +957,15 @@ function startGeoCanvasWindAnimation(){
 }
 
 function startGroundWindAnimation(){
-  if(!map?.isStyleLoaded())return
+  if(!map)return
+  if(!map.isStyleLoaded()){
+    map.once('idle',()=>mapMode.value==='3d'&&startWindAnimation())
+    return
+  }
   const canvas=map.getCanvas()
   const particleCount=Math.max(180,Math.round(canvas.clientWidth*canvas.clientHeight/3400))
-  geoWindParticles=Array.from({length:particleCount},()=>{
-    const coordinates=randomWindPoint()
+  geoWindParticles=Array.from({length:particleCount},(_,index)=>{
+    const coordinates=screenWindPoint(index,particleCount)
     return {coordinates,trail:[coordinates],age:Math.random()*70,max:75+Math.random()*90}
   })
   if(map.getSource('weather-wind-3d'))map.getSource('weather-wind-3d').setData(turf.featureCollection([]))
@@ -937,7 +974,7 @@ function startGroundWindAnimation(){
     map.addLayer({
       id:'weather-wind-3d-glow',type:'line',source:'weather-wind-3d',minzoom:9,maxzoom:20,
       layout:{'line-elevation-reference':'ground','line-cap':'round','line-join':'round'},
-      paint:{'line-z-offset':8,'line-width':3.4,'line-color':'#4ce2f4','line-opacity':.12,'line-blur':2}
+      paint:{'line-z-offset':18,'line-width':4.6,'line-color':'#4ce2f4','line-opacity':.22,'line-blur':2}
     })
   }
   if(!map.getLayer('weather-wind-3d')){
@@ -945,8 +982,9 @@ function startGroundWindAnimation(){
       id:'weather-wind-3d',type:'line',source:'weather-wind-3d',minzoom:9,maxzoom:20,
       layout:{'line-elevation-reference':'ground','line-cap':'round','line-join':'round'},
       paint:{
-        'line-z-offset':8,
-        'line-width':1.25,
+        'line-z-offset':18,
+        'line-width':1.65,
+        'line-emissive-strength':1,
         'line-gradient':['interpolate',['linear'],['line-progress'],
           0,'rgba(76,226,244,0)',.42,'rgba(76,226,244,.12)',.82,'rgba(76,226,244,.46)',1,'rgba(76,226,244,.78)']
       }
@@ -975,7 +1013,11 @@ function startGroundWindAnimation(){
     ].join('|')
     if(nextCameraKey!==cameraKey){
       cameraKey=nextCameraKey
-      geoWindParticles.forEach(resetParticle)
+      geoWindParticles.forEach((particle,index)=>{
+        resetParticle(particle)
+        particle.coordinates=screenWindPoint(index,geoWindParticles.length)
+        particle.trail=[particle.coordinates]
+      })
       map.getSource('weather-wind-3d')?.setData(turf.featureCollection([]))
       windAnimation=requestAnimationFrame(tick)
       return
@@ -1025,8 +1067,7 @@ function initMap(){
     applyLayerVisibility()
     scheduleViewWeather()
     // 无论 2D 还是 3D，都更新风场
-    updateWindVisibility()
-    if(windCanvasVisible.value)startWindAnimation()
+    restartWindForSettledView()
 })
   map.on('style.load',restoreLayers)
 }
