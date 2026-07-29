@@ -902,46 +902,26 @@ aside select,
   box-shadow: 0 0 8px rgba(255, 54, 94, 0.25);
 }
 
-/* 车辆图例 - 橙色渐变，与 dispatchGroundVehicle 标记一致 */
-.legend .vehicle-icon {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  background: linear-gradient(135deg, #f5a623, #e07b1a);
-  border-radius: 50%;
-  font-size: 11px;
-  font-style: normal;
-  border: 2px solid #ffffffcc;
-  flex-shrink: 0;
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
-  box-shadow: 0 2px 8px rgba(240, 162, 60, 0.35);
-}
-.legend .vehicle-icon::after {
-  content: "🚚";
-  line-height: 1;
-}
 
-/* 无人机图例 - 蓝色渐变 + 发光边框，与 ensureFlightMarker 一致 */
+
+
+/* 无人机图例 - 与地图无人机样式一致（深色背景 + ✣ 符号 + 发光） */
 .legend .drone-icon {
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
-  background: linear-gradient(135deg, #3a8fd4, #1a6b9e);
-  border-radius: 50%;
-  font-size: 11px;
-  font-style: normal;
-  border: 2px solid #54eeff;
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  border: none;
   flex-shrink: 0;
-  color: #fff;
-  text-shadow: 0 0 8px rgba(84, 238, 255, 0.5);
-  box-shadow: 0 0 16px rgba(84, 238, 255, 0.25);
-  animation: drone-pulse 2s ease-in-out infinite;
+  color: #54eeff;
+  font-size: 16px;
+  font-style: normal;
+  text-shadow: 0 0 12px rgba(84, 238, 255, 0.6);
+  filter: drop-shadow(0 0 6px rgba(84, 238, 255, 0.3));
 }
 .legend .drone-icon::after {
-  content: "✈";
+  content: "✣";
   line-height: 1;
 }
 
