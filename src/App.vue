@@ -777,56 +777,104 @@ function startWindAnimation(){
    if(mapMode.value==='2d')startGeoCanvasWindAnimation()
    else startGroundWindAnimation()
  }
+function startGeoCanvasWindAnimation() {
+  const canvas = windCanvas.value, host = canvas?.parentElement
+  if (!map || !canvas || !host) return
+  const rect = host.getBoundingClientRect(), ratio = Math.min(2, window.devicePixelRatio || 1)
+  canvas.width = rect.width * ratio
+  canvas.height = rect.height * ratio
+  canvas.style.width = `${rect.width}px`
+  canvas.style.height = `${rect.height}px`
+  const ctx = canvas.getContext('2d')
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
 
+  const randomPoint = () => {
+    const bounds = map.getBounds()
+    return [
+      bounds.getWest() + Math.random() * (bounds.getEast() - bounds.getWest()),
+      bounds.getSouth() + Math.random() * (bounds.getNorth() - bounds.getSouth())
+    ]
+  }
 
+  windParticles = Array.from(
+    { length: Math.max(95, Math.round(rect.width * rect.height / 5600)) },
+    () => ({ coordinates: randomPoint(), age: Math.random() * 100, max: 70 + Math.random() * 100 })
+  )
 
- function startGeoCanvasWindAnimation(){
-   const canvas=windCanvas.value,host=canvas?.parentElement
-   if(!map||!canvas||!host)return
-   const rect=host.getBoundingClientRect(),ratio=Math.min(2,window.devicePixelRatio||1)
-   canvas.width=rect.width*ratio;canvas.height=rect.height*ratio;canvas.style.width=`${rect.width}px`;canvas.style.height=`${rect.height}px`
-   const ctx=canvas.getContext('2d');ctx.setTransform(ratio,0,0,ratio,0,0)
-   const randomPoint=()=>{
-     const bounds=map.getBounds()
-     return [bounds.getWest()+Math.random()*(bounds.getEast()-bounds.getWest()),bounds.getSouth()+Math.random()*(bounds.getNorth()-bounds.getSouth())]
-   }
-   windParticles=Array.from({length:Math.max(95,Math.round(rect.width*rect.height/5600))},()=>({coordinates:randomPoint(),age:Math.random()*100,max:70+Math.random()*100}))
-   const nearestSample=coordinates=>{
-     const samples=weatherGrid.value.length?weatherGrid.value:[weather.value]
-     let best=samples[0],bestDistance=Infinity
-     samples.forEach(s=>{if(!s.coordinates)return;const d=(coordinates[0]-s.coordinates[0])**2+(coordinates[1]-s.coordinates[1])**2;if(d<bestDistance){bestDistance=d;best=s}})
-     return best||weather.value
-   }
-    let cameraKey='',last=0
-   const tick=time=>{
-     if(mapMode.value!=='2d'||capacityPage.value||!layerVisible.value.weather){ctx.clearRect(0,0,canvas.clientWidth,canvas.clientHeight);return}
-     if(time-last<33){windAnimation=requestAnimationFrame(tick);return}
-     last=time
-     const nextCameraKey=`${map.getCenter().lng.toFixed(4)}-${map.getCenter().lat.toFixed(4)}-${map.getZoom().toFixed(2)}-${map.getBearing().toFixed(1)}`
-     if(nextCameraKey!==cameraKey){ctx.clearRect(0,0,canvas.clientWidth,canvas.clientHeight);cameraKey=nextCameraKey}
-     else{ctx.fillStyle='rgba(5,18,34,.11)';ctx.fillRect(0,0,canvas.clientWidth,canvas.clientHeight)}
-     ctx.lineWidth=1.1
-     const bounds=map.getBounds(),latitude=map.getCenter().lat
-     const kilometersPerPixel=156.543*Math.cos(latitude*Math.PI/180)/Math.pow(2,map.getZoom())
-     windParticles.forEach(p=>{
-       const sample=nearestSample(p.coordinates)
-       const direction=windLevel.value==='surface'?(sample.groundWindDirection??sample.windDirection):sample.windDirection
-       const speed=windLevel.value==='surface'?(sample.groundWindSpeed??sample.windSpeed):sample.windSpeed
-       const bearing=((direction||0)+180)%360*Math.PI/180
-       const step=Math.max(.0008,kilometersPerPixel*Math.max(.5,Math.min(2,(speed||2)/4)))
-       const oldCoordinates=p.coordinates
-       const next=[oldCoordinates[0]+Math.sin(bearing)*step/(111*Math.max(.3,Math.cos(oldCoordinates[1]*Math.PI/180))),oldCoordinates[1]+Math.cos(bearing)*step/111]
-       const from=map.project(oldCoordinates),to=map.project(next)
-       const color=(speed||0)>=12?'255,64,92':(speed||0)>=8?'255,203,68':'76,226,244'
-       ctx.strokeStyle=`rgba(${color},.72)`;ctx.beginPath();ctx.moveTo(from.x,from.y);ctx.lineTo(to.x,to.y);ctx.stroke()
-       p.coordinates=next;p.age++
-       if(p.age>p.max||!bounds.contains(next)){p.coordinates=randomPoint();p.age=0}
-     })
-     windAnimation=requestAnimationFrame(tick）
-   }
-   windAnimation=requestAnimationFrame(tick)
- }
+  const nearestSample = coordinates => {
+    const samples = weatherGrid.value.length ? weatherGrid.value : [weather.value]
+    let best = samples[0], bestDistance = Infinity
+    samples.forEach(s => {
+      if (!s.coordinates) return
+      const d = (coordinates[0] - s.coordinates[0]) ** 2 + (coordinates[1] - s.coordinates[1]) ** 2
+      if (d < bestDistance) { bestDistance = d; best = s }
+    })
+    return best || weather.value
+  }
 
+  let cameraKey = '', last = 0
+
+  const tick = time => {
+    if (mapMode.value !== '2d' || capacityPage.value || !layerVisible.value.weather) {
+      ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight)
+      windAnimation = requestAnimationFrame(tick)
+      return
+    }
+    if (time - last < 33) {
+      windAnimation = requestAnimationFrame(tick)
+      return
+    }
+    last = time
+
+    const nextCameraKey = `${map.getCenter().lng.toFixed(4)}-${map.getCenter().lat.toFixed(4)}-${map.getZoom().toFixed(2)}-${map.getBearing().toFixed(1)}`
+    if (nextCameraKey !== cameraKey) {
+      ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight)
+      cameraKey = nextCameraKey
+    } else {
+      ctx.fillStyle = 'rgba(5,18,34,.11)'
+      ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight)
+    }
+
+    ctx.lineWidth = 1.1
+    const bounds = map.getBounds()
+    const latitude = map.getCenter().lat
+    const kilometersPerPixel = 156.543 * Math.cos(latitude * Math.PI / 180) / Math.pow(2, map.getZoom())
+
+    windParticles.forEach(p => {
+      const sample = nearestSample(p.coordinates)
+      const direction = windLevel.value === 'surface' ? (sample.groundWindDirection ?? sample.windDirection) : sample.windDirection
+      const speed = windLevel.value === 'surface' ? (sample.groundWindSpeed ?? sample.windSpeed) : sample.windSpeed
+      const bearing = ((direction || 0) + 180) % 360 * Math.PI / 180
+      const step = Math.max(.0008, kilometersPerPixel * Math.max(.5, Math.min(2, (speed || 2) / 4)))
+
+      const oldCoordinates = p.coordinates
+      const next = [
+        oldCoordinates[0] + Math.sin(bearing) * step / (111 * Math.max(.3, Math.cos(oldCoordinates[1] * Math.PI / 180))),
+        oldCoordinates[1] + Math.cos(bearing) * step / 111
+      ]
+      const from = map.project(oldCoordinates)
+      const to = map.project(next)
+
+      const color = (speed || 0) >= 12 ? '255,64,92' : (speed || 0) >= 8 ? '255,203,68' : '76,226,244'
+      ctx.strokeStyle = `rgba(${color},.72)`
+      ctx.beginPath()
+      ctx.moveTo(from.x, from.y)
+      ctx.lineTo(to.x, to.y)
+      ctx.stroke()
+
+      p.coordinates = next
+      p.age++
+      if (p.age > p.max || !bounds.contains(next)) {
+        p.coordinates = randomPoint()
+        p.age = 0
+      }
+    })
+
+    windAnimation = requestAnimationFrame(tick)
+  }
+
+  windAnimation = requestAnimationFrame(tick)
+}
 
   
   // 启动动画
