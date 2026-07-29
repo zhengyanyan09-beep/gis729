@@ -978,31 +978,12 @@ function changeBasemapMemory(){
   else localStorage.removeItem('medical-basemap-v1')
   toast(rememberBasemap.value?'下次打开将保留当前底图':'已恢复为每次打开使用科技暗色底图')
 }
-// function updateWindVisibility(){
-//   if(!map)return
-//   const c=map.getCenter(),z=map.getZoom()
-//   windCanvasVisible.value=!capacityPage.value&&layerVisible.value.weather&&mapMode.value==='2d'&&z>=8.8&&z<=18&&c.lng>=121.0&&c.lng<=121.9&&c.lat>=30.7&&c.lat<=31.7
-// }
+ function updateWindVisibility(){
+   if(!map)return
+   const c=map.getCenter(),z=map.getZoom()
+   windCanvasVisible.value=!capacityPage.value&&layerVisible.value.weather&&mapMode.value==='2d'&&z>=8.8&&z<=18&&c.lng>=121.0&&c.lng<=121.9&&c.lat>=30.7&&c.lat<=31.7
+ }
 
-function updateWindVisibility() {
-  if (!map) return
-  const c = map.getCenter()
-  const z = map.getZoom()
-  // 2D 和 3D 模式都显示风场粒子
-  windCanvasVisible.value = !capacityPage.value && 
-    layerVisible.value.weather && 
-    z >= 8.8 && 
-    z <= 18 && 
-    c.lng >= 121.0 && 
-    c.lng <= 121.9 && 
-    c.lat >= 30.7 && 
-    c.lat <= 31.7
-  
-  // 如果风场可见但粒子动画未启动，重新启动
-  if (windCanvasVisible.value && !windAnimation) {
-    startWindAnimation()
-  }
-}
 
 function restoreLayers(){
   map.getStyle().layers.forEach(layer=>{
