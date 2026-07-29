@@ -875,14 +875,14 @@ function nextWindCoordinate(coordinates,particle){
 function startGeoCanvasWindAnimation(){
   const canvas=windCanvas.value,host=canvas?.parentElement
   if(!map||!canvas||!host)return
-  const rect=host.getBoundingClientRect(),ratio=Math.min(2,window.devicePixelRatio||1)
+  const rect=map.getCanvas().getBoundingClientRect(),ratio=Math.min(2,window.devicePixelRatio||1)
   canvas.width=Math.round(rect.width*ratio)
   canvas.height=Math.round(rect.height*ratio)
   canvas.style.width=`${rect.width}px`
   canvas.style.height=`${rect.height}px`
   const ctx=canvas.getContext('2d')
   ctx.setTransform(ratio,0,0,ratio,0,0)
-  ctx.lineWidth=1.15
+  ctx.lineWidth=1.65
   ctx.lineCap='round'
   const particleCount=Math.max(180,Math.round(rect.width*rect.height/3400))
   windParticles=Array.from({length:particleCount},(_,index)=>({
@@ -1055,6 +1055,7 @@ function initMap(){
   map.dragRotate.enable();map.dragRotate.enablePitch()
   map.addControl(new mapboxgl.NavigationControl({showCompass:true,visualizePitch:true}),'bottom-right')
   map.on('move',()=>{mapBearing.value=Math.round(map.getBearing());mapPitch.value=Math.round(map.getPitch());mapZoom.value=map.getZoom().toFixed(1);updateWindVisibility()})
+  map.on('resize',restartWindForSettledView)
   // map.on('moveend',()=>{
   //   const nextMode=map.getPitch()>8?'3d':'2d',modeChanged=nextMode!==mapMode.value
   //   mapMode.value=nextMode;applyLayerVisibility();scheduleViewWeather()
@@ -1208,7 +1209,23 @@ function updateMapData(){
   if(routeIsSafe.value){addSource('air-route',airLine.value);if(!map.getLayer('air-glow'))map.addLayer({id:'air-glow',type:'line',source:'air-route',layout:{'line-elevation-reference':'ground'},paint:{'line-z-offset':120,'line-color':'#3de7ff','line-width':10,'line-opacity':.18}});if(!map.getLayer('air-route'))map.addLayer({id:'air-route',type:'line',source:'air-route',layout:{'line-elevation-reference':'ground'},paint:{'line-z-offset':120,'line-color':'#65f4ff','line-width':4,'line-dasharray':[2,1]}})}
   else map.getSource('air-route')?.setData(turf.featureCollection([]))
 }
-function focusTask(){if(!activeTask.value)return;const b=new mapboxgl.LngLatBounds();b.extend(activeTask.value.destination);if(selectedSupplier.value)b.extend(selectedSupplier.value.coordinates);map.fitBounds(b,{padding:110,maxZoom:14})}
+function focusTask(){
+  if(!activeTask.value||!map)return
+  const bounds=new mapboxgl.LngLatBounds()
+  bounds.extend(activeTask.value.destination)
+  if(selectedSupplier.value)bounds.extend(selectedSupplier.value.coordinates)
+  map.stop()
+  map.resize()
+  requestAnimationFrame(()=>{
+    map.fitBounds(bounds,{padding:110,maxZoom:14,duration:700})
+    map.once('moveend',()=>{
+      map.resize()
+      restartWindForSettledView()
+      clearTimeout(windRestartTimer)
+      windRestartTimer=setTimeout(restartWindForSettledView,420)
+    })
+  })
+}
 function setMapView(mode){
   if(!map)return
   const currentCenter=map.getCenter()
