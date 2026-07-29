@@ -821,10 +821,9 @@ function randomWindPoint(){
   const canvas=map.getCanvas()
   const width=Math.max(1,canvas.clientWidth)
   const height=Math.max(1,canvas.clientHeight)
-  const overscan=.16
   const point=map.unproject([
-    (-overscan+Math.random()*(1+overscan*2))*width,
-    (-overscan+Math.random()*(1+overscan*2))*height
+    4+Math.random()*Math.max(1,width-8),
+    4+Math.random()*Math.max(1,height-8)
   ])
   return [point.lng,point.lat]
 }
@@ -839,10 +838,9 @@ function screenWindPoint(index,count){
   const row=Math.floor(index/columns)
   const jitterX=(Math.random()-.5)*.46
   const jitterY=(Math.random()-.5)*.46
-  const overscan=.14
   const point=map.unproject([
-    (-overscan+(column+.5+jitterX)/columns*(1+overscan*2))*width,
-    (-overscan+(row+.5+jitterY)/rows*(1+overscan*2))*height
+    Math.max(4,Math.min(width-4,(column+.5+jitterX)*width/columns)),
+    Math.max(4,Math.min(height-4,(row+.5+jitterY)*height/rows))
   ])
   return [point.lng,point.lat]
 }
@@ -935,12 +933,12 @@ function startGeoCanvasWindAnimation(){
     ctx.fillRect(0,0,rect.width,rect.height)
     ctx.globalCompositeOperation='source-over'
     windParticles.forEach(particle=>{
-      if(particle.age>particle.max||!windPointInOverscan(particle.coordinates)){
+      if(particle.age>particle.max||!windPointInOverscan(particle.coordinates,12)){
         resetParticle(particle)
         return
       }
       const next=nextWindCoordinate(particle.coordinates,particle)
-      if(!windPointInOverscan(next.coordinates)){
+      if(!windPointInOverscan(next.coordinates,12)){
         resetParticle(particle)
         return
       }
