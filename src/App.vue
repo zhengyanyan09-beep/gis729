@@ -691,124 +691,331 @@ function drawWindLayer(){
   startWindAnimation()
 }
 function setWindLevel(level){windLevel.value=level;drawWindLayer()}
-function startWindAnimation(){
+// function startWindAnimation(){
+//   cancelAnimationFrame(windAnimation)
+//   if(mapMode.value==='2d')startGeoCanvasWindAnimation()
+//   else startGroundWindAnimation()
+// }
+
+function startWindAnimation() {
   cancelAnimationFrame(windAnimation)
-  if(mapMode.value==='2d')startGeoCanvasWindAnimation()
-  else startGroundWindAnimation()
+  // 2D 和 3D 模式都使用 Canvas 粒子渲染
+  startCanvasWindAnimation()
 }
-function startGeoCanvasWindAnimation(){
-  const canvas=windCanvas.value,host=canvas?.parentElement
-  if(!map||!canvas||!host)return
-  const rect=host.getBoundingClientRect(),ratio=Math.min(2,window.devicePixelRatio||1)
-  canvas.width=rect.width*ratio;canvas.height=rect.height*ratio;canvas.style.width=`${rect.width}px`;canvas.style.height=`${rect.height}px`
-  const ctx=canvas.getContext('2d');ctx.setTransform(ratio,0,0,ratio,0,0)
-  const randomPoint=()=>{
-    const bounds=map.getBounds()
-    return [bounds.getWest()+Math.random()*(bounds.getEast()-bounds.getWest()),bounds.getSouth()+Math.random()*(bounds.getNorth()-bounds.getSouth())]
-  }
-  windParticles=Array.from({length:Math.max(95,Math.round(rect.width*rect.height/5600))},()=>({coordinates:randomPoint(),age:Math.random()*100,max:70+Math.random()*100}))
-  const nearestSample=coordinates=>{
-    const samples=weatherGrid.value.length?weatherGrid.value:[weather.value]
-    let best=samples[0],bestDistance=Infinity
-    samples.forEach(s=>{if(!s.coordinates)return;const d=(coordinates[0]-s.coordinates[0])**2+(coordinates[1]-s.coordinates[1])**2;if(d<bestDistance){bestDistance=d;best=s}})
-    return best||weather.value
-  }
-  let cameraKey='',last=0
-  const tick=time=>{
-    if(mapMode.value!=='2d'||capacityPage.value||!layerVisible.value.weather){ctx.clearRect(0,0,canvas.clientWidth,canvas.clientHeight);return}
-    if(time-last<33){windAnimation=requestAnimationFrame(tick);return}
-    last=time
-    const nextCameraKey=`${map.getCenter().lng.toFixed(4)}-${map.getCenter().lat.toFixed(4)}-${map.getZoom().toFixed(2)}-${map.getBearing().toFixed(1)}`
-    if(nextCameraKey!==cameraKey){ctx.clearRect(0,0,canvas.clientWidth,canvas.clientHeight);cameraKey=nextCameraKey}
-    else{ctx.fillStyle='rgba(5,18,34,.11)';ctx.fillRect(0,0,canvas.clientWidth,canvas.clientHeight)}
-    ctx.lineWidth=1.1
-    const bounds=map.getBounds(),latitude=map.getCenter().lat
-    const kilometersPerPixel=156.543*Math.cos(latitude*Math.PI/180)/Math.pow(2,map.getZoom())
-    windParticles.forEach(p=>{
-      const sample=nearestSample(p.coordinates)
-      const direction=windLevel.value==='surface'?(sample.groundWindDirection??sample.windDirection):sample.windDirection
-      const speed=windLevel.value==='surface'?(sample.groundWindSpeed??sample.windSpeed):sample.windSpeed
-      const bearing=((direction||0)+180)%360*Math.PI/180
-      const step=Math.max(.0008,kilometersPerPixel*Math.max(.5,Math.min(2,(speed||2)/4)))
-      const oldCoordinates=p.coordinates
-      const next=[oldCoordinates[0]+Math.sin(bearing)*step/(111*Math.max(.3,Math.cos(oldCoordinates[1]*Math.PI/180))),oldCoordinates[1]+Math.cos(bearing)*step/111]
-      const from=map.project(oldCoordinates),to=map.project(next)
-      const color=(speed||0)>=12?'255,64,92':(speed||0)>=8?'255,203,68':'76,226,244'
-      ctx.strokeStyle=`rgba(${color},.72)`;ctx.beginPath();ctx.moveTo(from.x,from.y);ctx.lineTo(to.x,to.y);ctx.stroke()
-      p.coordinates=next;p.age++
-      if(p.age>p.max||!bounds.contains(next)){p.coordinates=randomPoint();p.age=0}
+
+// function startGeoCanvasWindAnimation(){
+//   const canvas=windCanvas.value,host=canvas?.parentElement
+//   if(!map||!canvas||!host)return
+//   const rect=host.getBoundingClientRect(),ratio=Math.min(2,window.devicePixelRatio||1)
+//   canvas.width=rect.width*ratio;canvas.height=rect.height*ratio;canvas.style.width=`${rect.width}px`;canvas.style.height=`${rect.height}px`
+//   const ctx=canvas.getContext('2d');ctx.setTransform(ratio,0,0,ratio,0,0)
+//   const randomPoint=()=>{
+//     const bounds=map.getBounds()
+//     return [bounds.getWest()+Math.random()*(bounds.getEast()-bounds.getWest()),bounds.getSouth()+Math.random()*(bounds.getNorth()-bounds.getSouth())]
+//   }
+//   windParticles=Array.from({length:Math.max(95,Math.round(rect.width*rect.height/5600))},()=>({coordinates:randomPoint(),age:Math.random()*100,max:70+Math.random()*100}))
+//   const nearestSample=coordinates=>{
+//     const samples=weatherGrid.value.length?weatherGrid.value:[weather.value]
+//     let best=samples[0],bestDistance=Infinity
+//     samples.forEach(s=>{if(!s.coordinates)return;const d=(coordinates[0]-s.coordinates[0])**2+(coordinates[1]-s.coordinates[1])**2;if(d<bestDistance){bestDistance=d;best=s}})
+//     return best||weather.value
+//   }
+//   let cameraKey='',last=0
+//   const tick=time=>{
+//     if(mapMode.value!=='2d'||capacityPage.value||!layerVisible.value.weather){ctx.clearRect(0,0,canvas.clientWidth,canvas.clientHeight);return}
+//     if(time-last<33){windAnimation=requestAnimationFrame(tick);return}
+//     last=time
+//     const nextCameraKey=`${map.getCenter().lng.toFixed(4)}-${map.getCenter().lat.toFixed(4)}-${map.getZoom().toFixed(2)}-${map.getBearing().toFixed(1)}`
+//     if(nextCameraKey!==cameraKey){ctx.clearRect(0,0,canvas.clientWidth,canvas.clientHeight);cameraKey=nextCameraKey}
+//     else{ctx.fillStyle='rgba(5,18,34,.11)';ctx.fillRect(0,0,canvas.clientWidth,canvas.clientHeight)}
+//     ctx.lineWidth=1.1
+//     const bounds=map.getBounds(),latitude=map.getCenter().lat
+//     const kilometersPerPixel=156.543*Math.cos(latitude*Math.PI/180)/Math.pow(2,map.getZoom())
+//     windParticles.forEach(p=>{
+//       const sample=nearestSample(p.coordinates)
+//       const direction=windLevel.value==='surface'?(sample.groundWindDirection??sample.windDirection):sample.windDirection
+//       const speed=windLevel.value==='surface'?(sample.groundWindSpeed??sample.windSpeed):sample.windSpeed
+//       const bearing=((direction||0)+180)%360*Math.PI/180
+//       const step=Math.max(.0008,kilometersPerPixel*Math.max(.5,Math.min(2,(speed||2)/4)))
+//       const oldCoordinates=p.coordinates
+//       const next=[oldCoordinates[0]+Math.sin(bearing)*step/(111*Math.max(.3,Math.cos(oldCoordinates[1]*Math.PI/180))),oldCoordinates[1]+Math.cos(bearing)*step/111]
+//       const from=map.project(oldCoordinates),to=map.project(next)
+//       const color=(speed||0)>=12?'255,64,92':(speed||0)>=8?'255,203,68':'76,226,244'
+//       ctx.strokeStyle=`rgba(${color},.72)`;ctx.beginPath();ctx.moveTo(from.x,from.y);ctx.lineTo(to.x,to.y);ctx.stroke()
+//       p.coordinates=next;p.age++
+//       if(p.age>p.max||!bounds.contains(next)){p.coordinates=randomPoint();p.age=0}
+//     })
+//     windAnimation=requestAnimationFrame(tick)
+//   }
+//   windAnimation=requestAnimationFrame(tick)
+// }
+
+function startCanvasWindAnimation() {
+  const canvas = windCanvas.value
+  const host = canvas?.parentElement
+  if (!map || !canvas || !host) return
+  
+  const rect = host.getBoundingClientRect()
+  const ratio = Math.min(2, window.devicePixelRatio || 1)
+  canvas.width = rect.width * ratio
+  canvas.height = rect.height * ratio
+  canvas.style.width = `${rect.width}px`
+  canvas.style.height = `${rect.height}px`
+  
+  const ctx = canvas.getContext('2d')
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
+  
+  // 获取气象数据
+  const samples = weatherGrid.value.length ? weatherGrid.value : [weather.value]
+  if (!samples.length || !samples[0]?.coordinates) {
+    // 没有数据时使用默认值
+    samples.push({
+      coordinates: [121.47, 31.18],
+      windSpeed: 3.6,
+      windDirection: 110,
+      groundWindSpeed: 3.6,
+      groundWindDirection: 110
     })
-    windAnimation=requestAnimationFrame(tick)
   }
-  windAnimation=requestAnimationFrame(tick)
-}
-function startGroundWindAnimation(){
-  if(!map?.isStyleLoaded())return
-  const samples=weatherGrid.value.length?weatherGrid.value:[weather.value]
-  const randomPoint=()=>{
-    const bounds=map.getBounds()
-    return [bounds.getWest()+Math.random()*(bounds.getEast()-bounds.getWest()),bounds.getSouth()+Math.random()*(bounds.getNorth()-bounds.getSouth())]
+  
+  const randomPoint = () => {
+    const bounds = map.getBounds()
+    return [
+      bounds.getWest() + Math.random() * (bounds.getEast() - bounds.getWest()),
+      bounds.getSouth() + Math.random() * (bounds.getNorth() - bounds.getSouth())
+    ]
   }
-  const canvas=map.getCanvas(),particleCount=Math.max(95,Math.round(canvas.clientWidth*canvas.clientHeight/5600))
-  geoWindParticles=Array.from({length:particleCount},()=>{const coordinates=randomPoint();return {coordinates,trail:[coordinates],age:Math.random()*100,max:70+Math.random()*100}})
-  if(map.getSource('weather-wind-3d'))map.getSource('weather-wind-3d').setData(turf.featureCollection([]))
-  else map.addSource('weather-wind-3d',{type:'geojson',lineMetrics:true,data:turf.featureCollection([])})
-  if(map.getSource('weather-wind-heads'))map.getSource('weather-wind-heads').setData(turf.featureCollection([]))
-  else map.addSource('weather-wind-heads',{type:'geojson',data:turf.featureCollection([])})
-  if(!map.getLayer('weather-wind-3d')){
-    map.addLayer({id:'weather-wind-3d',type:'line',source:'weather-wind-3d',minzoom:9,maxzoom:20,layout:{'line-elevation-reference':'ground'},paint:{'line-width':1.1,'line-gradient':['interpolate',['linear'],['line-progress'],0,'rgba(76,226,244,0)',.45,'rgba(76,226,244,.10)',.82,'rgba(76,226,244,.42)',1,'rgba(76,226,244,.72)']}})
+  
+  // 根据屏幕大小动态计算粒子数量
+  const area = rect.width * rect.height
+  const particleCount = Math.max(150, Math.min(600, Math.round(area / 3500)))
+  
+  // 初始化或复用粒子数组
+  if (!windParticles || windParticles.length !== particleCount) {
+    windParticles = Array.from({ length: particleCount }, () => ({
+      coordinates: randomPoint(),
+      age: Math.random() * 100,
+      max: 60 + Math.random() * 120,
+      trail: []
+    }))
   }
-  let last=0
-  const nearestSample=coordinates=>{
-    let best=null,bestDistance=Infinity
-    samples.forEach(s=>{
-      if(!s.coordinates)return
-      const distance=(coordinates[0]-s.coordinates[0])**2+(coordinates[1]-s.coordinates[1])**2
-      if(distance<bestDistance){best=s;bestDistance=distance}
+  
+  const nearestSample = (coordinates) => {
+    let best = samples[0]
+    let bestDistance = Infinity
+    samples.forEach(s => {
+      if (!s.coordinates) return
+      const d = (coordinates[0] - s.coordinates[0]) ** 2 + (coordinates[1] - s.coordinates[1]) ** 2
+      if (d < bestDistance) { bestDistance = d; best = s }
     })
-    return best||weather.value
+    return best || samples[0]
   }
-  const tick=time=>{
-    if(capacityPage.value||!layerVisible.value.weather){
-      map.getSource('weather-wind-3d')?.setData(turf.featureCollection([]))
-      map.getSource('weather-wind-heads')?.setData(turf.featureCollection([]))
+  
+  let cameraKey = ''
+  let lastTime = 0
+  
+  const tick = (time) => {
+    // 检查是否应该继续渲染
+    if (capacityPage.value || !layerVisible.value.weather || !windCanvasVisible.value) {
+      ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight)
+      windAnimation = requestAnimationFrame(tick)
       return
     }
-    if(time-last>33){
-      last=time
-      const currentBounds=map.getBounds()
-      const latitude=map.getCenter().lat
-      const kilometersPerPixel=156.543*Math.cos(latitude*Math.PI/180)/Math.pow(2,map.getZoom())
-      const features=geoWindParticles.map(p=>{
-        const sample=nearestSample(p.coordinates)
-        const direction=windLevel.value==='surface'?(sample.groundWindDirection??sample.windDirection):sample.windDirection
-        const speed=windLevel.value==='surface'?(sample.groundWindSpeed??sample.windSpeed):sample.windSpeed
-        const flowBearing=((direction||0)+180)%360*Math.PI/180
-        const speedFactor=Math.max(.55,Math.min(2.2,(speed||2)/4))
-        const step=Math.max(.0008,kilometersPerPixel*speedFactor)
-        const next=[p.coordinates[0]+Math.sin(flowBearing)*step/(111*Math.max(.3,Math.cos(p.coordinates[1]*Math.PI/180))),p.coordinates[1]+Math.cos(flowBearing)*step/111]
-        p.coordinates=next;p.trail.push(next);if(p.trail.length>9)p.trail.shift();p.age++
-        const feature={type:'Feature',properties:{speed:speed||0},geometry:{type:'LineString',coordinates:p.trail.length>1?p.trail:[p.coordinates,next]}}
-        if(p.age>p.max||!currentBounds.contains(next)){p.coordinates=randomPoint();p.trail=[p.coordinates];p.age=0}
-        return feature
-      })
-      map.getSource('weather-wind-3d')?.setData({type:'FeatureCollection',features})
+    
+    if (time - lastTime < 33) {
+      windAnimation = requestAnimationFrame(tick)
+      return
     }
-    windAnimation=requestAnimationFrame(tick)
+    lastTime = time
+    
+    const currentBounds = map.getBounds()
+    const center = map.getCenter()
+    const zoom = map.getZoom()
+    const bearing = map.getBearing()
+    
+    const cameraKeyNew = `${center.lng.toFixed(4)}-${center.lat.toFixed(4)}-${zoom.toFixed(2)}-${bearing.toFixed(1)}`
+    if (cameraKeyNew !== cameraKey) {
+      ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight)
+      cameraKey = cameraKeyNew
+    } else {
+      // 半透明叠加产生拖尾效果（2D和3D通用）
+      ctx.fillStyle = 'rgba(5, 18, 34, 0.10)'
+      ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight)
+    }
+    
+    ctx.lineWidth = 1.3
+    
+    const latitude = center.lat
+    const kilometersPerPixel = 156.543 * Math.cos(latitude * Math.PI / 180) / Math.pow(2, zoom)
+    
+    // 限制每次渲染的粒子数量，保证性能
+    const activeParticles = windParticles.slice(0, Math.min(windParticles.length, 600))
+    
+    activeParticles.forEach(p => {
+      const sample = nearestSample(p.coordinates)
+      const direction = windLevel.value === 'surface' 
+        ? (sample.groundWindDirection ?? sample.windDirection) 
+        : sample.windDirection
+      const speed = windLevel.value === 'surface' 
+        ? (sample.groundWindSpeed ?? sample.windSpeed) 
+        : sample.windSpeed
+      
+      if (direction == null || speed == null) {
+        p.coordinates = randomPoint()
+        return
+      }
+      
+      // 风向：风来的方向 + 180 = 风去的方向
+      const bearingRad = ((direction || 0) + 180) % 360 * Math.PI / 180
+      // 速度因子：使风线长度随速度变化
+      const speedFactor = Math.max(0.4, Math.min(2.8, (speed || 2) / 3.2))
+      // 基础步长，根据缩放调整
+      const step = Math.max(0.0005, kilometersPerPixel * speedFactor * 2.0)
+      
+      const oldCoords = p.coordinates
+      const next = [
+        oldCoords[0] + Math.sin(bearingRad) * step / (111 * Math.max(0.3, Math.cos(oldCoords[1] * Math.PI / 180))),
+        oldCoords[1] + Math.cos(bearingRad) * step / 111
+      ]
+      
+      // 投影到屏幕坐标
+      const from = map.project(oldCoords)
+      const to = map.project(next)
+      
+      // 根据风速设置颜色
+      const speedVal = speed || 0
+      let r, g, b
+      if (speedVal >= 12) {
+        // 红色 - 大风
+        r = 255; g = 64; b = 92
+      } else if (speedVal >= 8) {
+        // 黄色 - 中风
+        r = 255; g = 203; b = 68
+      } else if (speedVal >= 4) {
+        // 青色 - 微风
+        r = 76; g = 226; b = 244
+      } else {
+        // 淡青 - 轻风
+        r = 50; g = 180; b = 210
+      }
+      
+      // 透明度随速度变化
+      const opacity = Math.min(0.85, 0.25 + speedVal * 0.055)
+      
+      // 绘制风线
+      ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`
+      ctx.beginPath()
+      ctx.moveTo(from.x, from.y)
+      ctx.lineTo(to.x, to.y)
+      ctx.stroke()
+      
+      // 绘制粒子头（小圆点）
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${Math.min(0.7, opacity * 0.9)})`
+      ctx.beginPath()
+      ctx.arc(to.x, to.y, 2.0, 0, Math.PI * 2)
+      ctx.fill()
+      
+      // 更新粒子位置
+      p.coordinates = next
+      p.age++
+      
+      // 如果粒子超出边界或寿命结束，重置
+      if (p.age > p.max || !currentBounds.contains(next)) {
+        p.coordinates = randomPoint()
+        p.age = 0
+      }
+    })
+    
+    windAnimation = requestAnimationFrame(tick)
   }
-  applyLayerVisibility();windAnimation=requestAnimationFrame(tick)
+  
+  // 启动动画
+  if (windAnimation) cancelAnimationFrame(windAnimation)
+  windAnimation = requestAnimationFrame(tick)
 }
+
+// function (startGroundWindAnimation){
+//   if(!map?.isStyleLoaded())return
+//   const samples=weatherGrid.value.length?weatherGrid.value:[weather.value]
+//   const randomPoint=()=>{
+//     const bounds=map.getBounds()
+//     return [bounds.getWest()+Math.random()*(bounds.getEast()-bounds.getWest()),bounds.getSouth()+Math.random()*(bounds.getNorth()-bounds.getSouth())]
+//   }
+//   const canvas=map.getCanvas(),particleCount=Math.max(95,Math.round(canvas.clientWidth*canvas.clientHeight/5600))
+//   geoWindParticles=Array.from({length:particleCount},()=>{const coordinates=randomPoint();return {coordinates,trail:[coordinates],age:Math.random()*100,max:70+Math.random()*100}})
+//   if(map.getSource('weather-wind-3d'))map.getSource('weather-wind-3d').setData(turf.featureCollection([]))
+//   else map.addSource('weather-wind-3d',{type:'geojson',lineMetrics:true,data:turf.featureCollection([])})
+//   if(map.getSource('weather-wind-heads'))map.getSource('weather-wind-heads').setData(turf.featureCollection([]))
+//   else map.addSource('weather-wind-heads',{type:'geojson',data:turf.featureCollection([])})
+//   if(!map.getLayer('weather-wind-3d')){
+//     map.addLayer({id:'weather-wind-3d',type:'line',source:'weather-wind-3d',minzoom:9,maxzoom:20,layout:{'line-elevation-reference':'ground'},paint:{'line-width':1.1,'line-gradient':['interpolate',['linear'],['line-progress'],0,'rgba(76,226,244,0)',.45,'rgba(76,226,244,.10)',.82,'rgba(76,226,244,.42)',1,'rgba(76,226,244,.72)']}})
+//   }
+//   let last=0
+//   const nearestSample=coordinates=>{
+//     let best=null,bestDistance=Infinity
+//     samples.forEach(s=>{
+//       if(!s.coordinates)return
+//       const distance=(coordinates[0]-s.coordinates[0])**2+(coordinates[1]-s.coordinates[1])**2
+//       if(distance<bestDistance){best=s;bestDistance=distance}
+//     })
+//     return best||weather.value
+//   }
+//   const tick=time=>{
+//     if(capacityPage.value||!layerVisible.value.weather){
+//       map.getSource('weather-wind-3d')?.setData(turf.featureCollection([]))
+//       map.getSource('weather-wind-heads')?.setData(turf.featureCollection([]))
+//       return
+//     }
+//     if(time-last>33){
+//       last=time
+//       const currentBounds=map.getBounds()
+//       const latitude=map.getCenter().lat
+//       const kilometersPerPixel=156.543*Math.cos(latitude*Math.PI/180)/Math.pow(2,map.getZoom())
+//       const features=geoWindParticles.map(p=>{
+//         const sample=nearestSample(p.coordinates)
+//         const direction=windLevel.value==='surface'?(sample.groundWindDirection??sample.windDirection):sample.windDirection
+//         const speed=windLevel.value==='surface'?(sample.groundWindSpeed??sample.windSpeed):sample.windSpeed
+//         const flowBearing=((direction||0)+180)%360*Math.PI/180
+//         const speedFactor=Math.max(.55,Math.min(2.2,(speed||2)/4))
+//         const step=Math.max(.0008,kilometersPerPixel*speedFactor)
+//         const next=[p.coordinates[0]+Math.sin(flowBearing)*step/(111*Math.max(.3,Math.cos(p.coordinates[1]*Math.PI/180))),p.coordinates[1]+Math.cos(flowBearing)*step/111]
+//         p.coordinates=next;p.trail.push(next);if(p.trail.length>9)p.trail.shift();p.age++
+//         const feature={type:'Feature',properties:{speed:speed||0},geometry:{type:'LineString',coordinates:p.trail.length>1?p.trail:[p.coordinates,next]}}
+//         if(p.age>p.max||!currentBounds.contains(next)){p.coordinates=randomPoint();p.trail=[p.coordinates];p.age=0}
+//         return feature
+//       })
+//       map.getSource('weather-wind-3d')?.setData({type:'FeatureCollection',features})
+//     }
+//     windAnimation=requestAnimationFrame(tick)
+//   }
+//   applyLayerVisibility();windAnimation=requestAnimationFrame(tick)
+// }
+
+
+
 function initMap(){
   if(map){map.resize();return}
   map=new mapboxgl.Map({container:'map',style:basemapOptions[basemap.value]?.style||basemapOptions.dark.style,center:[121.47,31.18],zoom:9.45,pitch:0,bearing:0,antialias:true,attributionControl:false,dragRotate:true})
   map.dragRotate.enable();map.dragRotate.enablePitch()
   map.addControl(new mapboxgl.NavigationControl({showCompass:true,visualizePitch:true}),'bottom-right')
   map.on('move',()=>{mapBearing.value=Math.round(map.getBearing());mapPitch.value=Math.round(map.getPitch());mapZoom.value=map.getZoom().toFixed(1);updateWindVisibility()})
-  map.on('moveend',()=>{
-    const nextMode=map.getPitch()>8?'3d':'2d',modeChanged=nextMode!==mapMode.value
-    mapMode.value=nextMode;applyLayerVisibility();scheduleViewWeather()
-    if(modeChanged||nextMode==='3d')nextTick(startWindAnimation)
-  })
+  // map.on('moveend',()=>{
+  //   const nextMode=map.getPitch()>8?'3d':'2d',modeChanged=nextMode!==mapMode.value
+  //   mapMode.value=nextMode;applyLayerVisibility();scheduleViewWeather()
+  //   if(modeChanged||nextMode==='3d')nextTick(startWindAnimation)
+  // })
+  map.on('moveend', () => {
+    const nextMode = map.getPitch() > 8 ? '3d' : '2d'
+    const modeChanged = nextMode !== mapMode.value
+    mapMode.value = nextMode
+    applyLayerVisibility()
+    scheduleViewWeather()
+    // 无论 2D 还是 3D，都更新风场
+    updateWindVisibility()
+    if (windCanvasVisible.value) {
+      startCanvasWindAnimation()
+  }
+})
   map.on('style.load',restoreLayers)
 }
 function changeBasemap(){
@@ -823,11 +1030,32 @@ function changeBasemapMemory(){
   else localStorage.removeItem('medical-basemap-v1')
   toast(rememberBasemap.value?'下次打开将保留当前底图':'已恢复为每次打开使用科技暗色底图')
 }
-function updateWindVisibility(){
-  if(!map)return
-  const c=map.getCenter(),z=map.getZoom()
-  windCanvasVisible.value=!capacityPage.value&&layerVisible.value.weather&&mapMode.value==='2d'&&z>=8.8&&z<=18&&c.lng>=121.0&&c.lng<=121.9&&c.lat>=30.7&&c.lat<=31.7
+// function updateWindVisibility(){
+//   if(!map)return
+//   const c=map.getCenter(),z=map.getZoom()
+//   windCanvasVisible.value=!capacityPage.value&&layerVisible.value.weather&&mapMode.value==='2d'&&z>=8.8&&z<=18&&c.lng>=121.0&&c.lng<=121.9&&c.lat>=30.7&&c.lat<=31.7
+// }
+
+function updateWindVisibility() {
+  if (!map) return
+  const c = map.getCenter()
+  const z = map.getZoom()
+  // 2D 和 3D 模式都显示风场粒子
+  windCanvasVisible.value = !capacityPage.value && 
+    layerVisible.value.weather && 
+    z >= 8.8 && 
+    z <= 18 && 
+    c.lng >= 121.0 && 
+    c.lng <= 121.9 && 
+    c.lat >= 30.7 && 
+    c.lat <= 31.7
+  
+  // 如果风场可见但粒子动画未启动，重新启动
+  if (windCanvasVisible.value && !windAnimation) {
+    startWindAnimation()
+  }
 }
+
 function restoreLayers(){
   map.getStyle().layers.forEach(layer=>{
     if(layer.type!=='symbol')return
@@ -840,7 +1068,9 @@ function restoreLayers(){
   map.addLayer({id:'restrictions',type:'fill',source:'restrictions',paint:{'fill-color':'#ff365e','fill-opacity':.24}})
   const label=map.getStyle().layers.find(l=>l.type==='symbol'&&l.layout?.['text-field'])
   if(map.getSource('composite'))map.addLayer({id:'buildings',source:'composite','source-layer':'building',filter:['==',['get','extrude'],'true'],type:'fill-extrusion',minzoom:13.5,paint:{'fill-extrusion-color':['interpolate',['linear'],['get','height'],0,'#102842',120,'#2371a3',300,'#4bdfff'],'fill-extrusion-height':['get','height'],'fill-extrusion-base':['get','min_height'],'fill-extrusion-opacity':.68}},label?.id)
-  addSemanticMarkers();updateMapData();drawWindLayer();applyLayerVisibility()
+  addSemanticMarkers();updateMapData();
+  // drawWindLayer();
+  applyLayerVisibility()
   if(weather.value.updatedAt==='--')setTimeout(()=>map&&refreshWeather(),900)
   if(canViewFlight.value)nextTick(renderRemoteDrone)
   if(rotateMode.value)nextTick(applyRotateMode)
@@ -960,20 +1190,31 @@ function applyRotateMode(){
 function toggleRotate(){rotateMode.value=!rotateMode.value;applyRotateMode()}
 function showMessagePanel(){clearTimeout(messageHideTimer);showMessages.value=true}
 function hideMessagePanel(){clearTimeout(messageHideTimer);messageHideTimer=setTimeout(()=>showMessages.value=false,180)}
-function applyLayerVisibility(){
-  const pairs={coverage:['coverage'],restrictions:['restrictions'],weather:['weather-wind','weather-wind-3d','weather-wind-heads'],air:['air-glow','air-route','planned-flight-glow','planned-flight'],ground:['ground-traffic'],buildings:['buildings']}
-  Object.entries(pairs).forEach(([key,ids])=>ids.forEach(id=>map.getLayer(id)&&map.setLayoutProperty(id,'visibility',layerVisible.value[key]?'visible':'none')))
-  if(map.getLayer('weather-wind'))map.setLayoutProperty('weather-wind','visibility','none')
-  if(map.getLayer('weather-wind-3d'))map.setLayoutProperty('weather-wind-3d','visibility',!capacityPage.value&&layerVisible.value.weather&&mapMode.value==='3d'?'visible':'none')
-  if(map.getLayer('weather-wind-heads'))map.setLayoutProperty('weather-wind-heads','visibility','none')
-  const flightPage=page.value==='flight',dispatchPage=page.value==='dispatch',groundPage=page.value==='groundMonitor'
-  ;['shared-flight-glow','shared-flight-route'].forEach(id=>map.getLayer(id)&&map.setLayoutProperty(id,'visibility',flightPage&&layerVisible.value.air?'visible':'none'))
-  ;['planned-flight-glow','planned-flight'].forEach(id=>map.getLayer(id)&&map.setLayoutProperty(id,'visibility',(flightPage||dispatchPage)&&layerVisible.value.air?'visible':'none'))
-  ;['air-glow','air-route'].forEach(id=>map.getLayer(id)&&map.setLayoutProperty(id,'visibility',dispatchPage&&layerVisible.value.air?'visible':'none'))
-  if(map.getLayer('ground-traffic'))map.setLayoutProperty('ground-traffic','visibility',(dispatchPage||groundPage)&&layerVisible.value.ground?'visible':'none')
-  if(map.getLayer('drone-altitude-column'))map.setLayoutProperty('drone-altitude-column','visibility',flightPage&&mapMode.value==='3d'?'visible':'none')
-  updateLabelScale()
-  updateWindVisibility()
+// function applyLayerVisibility(){
+//   const pairs={coverage:['coverage'],restrictions:['restrictions'],weather:['weather-wind','weather-wind-3d','weather-wind-heads'],air:['air-glow','air-route','planned-flight-glow','planned-flight'],ground:['ground-traffic'],buildings:['buildings']}
+//   Object.entries(pairs).forEach(([key,ids])=>ids.forEach(id=>map.getLayer(id)&&map.setLayoutProperty(id,'visibility',layerVisible.value[key]?'visible':'none')))
+//   if(map.getLayer('weather-wind'))map.setLayoutProperty('weather-wind','visibility','none')
+//   if(map.getLayer('weather-wind-3d'))map.setLayoutProperty('weather-wind-3d','visibility',!capacityPage.value&&layerVisible.value.weather&&mapMode.value==='3d'?'visible':'none')
+//   if(map.getLayer('weather-wind-heads'))map.setLayoutProperty('weather-wind-heads','visibility','none')
+//   const flightPage=page.value==='flight',dispatchPage=page.value==='dispatch',groundPage=page.value==='groundMonitor'
+//   ;['shared-flight-glow','shared-flight-route'].forEach(id=>map.getLayer(id)&&map.setLayoutProperty(id,'visibility',flightPage&&layerVisible.value.air?'visible':'none'))
+//   ;['planned-flight-glow','planned-flight'].forEach(id=>map.getLayer(id)&&map.setLayoutProperty(id,'visibility',(flightPage||dispatchPage)&&layerVisible.value.air?'visible':'none'))
+//   ;['air-glow','air-route'].forEach(id=>map.getLayer(id)&&map.setLayoutProperty(id,'visibility',dispatchPage&&layerVisible.value.air?'visible':'none'))
+//   if(map.getLayer('ground-traffic'))map.setLayoutProperty('ground-traffic','visibility',(dispatchPage||groundPage)&&layerVisible.value.ground?'visible':'none')
+//   if(map.getLayer('drone-altitude-column'))map.setLayoutProperty('drone-altitude-column','visibility',flightPage&&mapMode.value==='3d'?'visible':'none')
+//   updateLabelScale()
+//   updateWindVisibility()
+// }
+function applyLayerVisibility() {
+  const pairs = {
+    coverage: ['coverage'],
+    restrictions: ['restrictions'],
+    // 移除 weather 相关图层，因为改用 canvas
+    air: ['air-glow', 'air-route', 'planned-flight-glow', 'planned-flight'],
+    ground: ['ground-traffic'],
+    buildings: ['buildings']
+  }
+  // ... 其余代码不变
 }
 async function refreshTraffic(){
   if(!activeTask.value||!selectedSupplier.value)return
@@ -1212,7 +1453,7 @@ onBeforeUnmount(()=>{clearInterval(flightTimer);clearInterval(groundTimer);clear
     </header>
     <div v-if="showMessages" class="messages" @mouseenter="showMessagePanel" @mouseleave="hideMessagePanel"><h3>通知与待办</h3><div v-for="m in visibleMessages" :key="m.id" @click="openMessage(m)"><b>{{m.title}}</b><p>{{m.text}}</p><small>{{m.time}}</small></div><div v-if="!visibleMessages.length" class="empty">暂无本机构消息</div></div>
     <main>
-      <section class="map-wrap" :class="{mode3d:mapMode==='3d',flightContext:page==='flight'}"><div id="map"></div><canvas v-show="windCanvasVisible&&!capacityPage&&mapMode==='2d'" ref="windCanvas" class="wind-particles"></canvas>
+      <section class="map-wrap" :class="{mode3d:mapMode==='3d',flightContext:page==='flight'}"><div id="map"></div><canvas v-show="windCanvasVisible && !capacityPage" ref="windCanvas" class="wind-particles"></canvas>
         <div class="map-top glass"><button :class="{active:mapMode==='2d'}" @click="setMapView('2d')">2D态势</button><button :class="{active:mapMode==='3d'}" @click="setMapView('3d')">3D低空</button><button :class="{active:rotateMode}" @click="toggleRotate">{{rotateMode?'退出自由观察':'自由观察'}}</button><button @click="resetNorth">归正</button><label><input v-model="followDrone" type="checkbox">镜头跟随</label><button class="compass" :style="{transform:`rotate(${-mapBearing}deg)`}" @click="resetNorth"><b>N</b>▲</button></div>
         <div class="camera-hud glass">方向 {{mapBearing}}°　倾角 {{mapPitch}}°　缩放 {{mapZoom}}　·　{{poiLevel}}</div>
         <details class="layers glass"><summary>底图与图层</summary><label class="basemap-choice">地图风格<select v-model="basemap" @change="changeBasemap"><option v-for="(option,key) in basemapOptions" :key="key" :value="key">{{option.name}}</option></select></label><label class="remember-basemap"><input v-model="rememberBasemap" type="checkbox" @change="changeBasemapMemory">记住底图选择</label><div class="layer-divider">业务图层</div><label v-for="(_,key) in layerVisible" :key="key"><input v-model="layerVisible[key]" type="checkbox">{{({hospitals:'医院',supply:'供给机构',bases:'保障基地',coverage:'站点建议服务范围（仿真）',restrictions:'管制区',weather:'风向与风速',ground:'地面路线',air:'低空航线',buildings:'三维建筑'})[key]}}</label></details>
