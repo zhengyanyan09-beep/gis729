@@ -247,42 +247,83 @@ const directAirLine = computed(()=>{
   if(!activeTask.value||!selectedSupplier.value) return null
   return turf.lineString([selectedSupplier.value.coordinates,activeTask.value.destination])
 })
+const routeSafetyBufferKm=.25
+const bufferedRestrictions=()=>restrictions
+  .map(zone=>turf.buffer(turf.polygon(zone.coordinates),routeSafetyBufferKm,{units:'kilometers'}))
+  .filter(Boolean)
+const segmentDistance=(a,b)=>turf.distance(turf.point(a),turf.point(b),{units:'kilometers'})
 function buildSafeLeg(from,to){
-  const polygons=restrictions.map(zone=>turf.polygon(zone.coordinates))
-  const clear=(a,b)=>!polygons.some(polygon=>turf.booleanIntersects(turf.lineString([a,b]),polygon))
-  if(clear(from,to))return turf.lineString([from,to],{safe:true})
-  const nodes=[from,to]
-  polygons.forEach(polygon=>{
-    const [w,s,e,n]=turf.bbox(polygon),pad=.0045
-    nodes.push([w-pad,s-pad],[w-pad,n+pad],[e+pad,n+pad],[e+pad,s-pad])
+  const obstacles=bufferedRestrictions()
+  const clear=(a,b)=>!obstacles.some(polygon=>turf.booleanIntersects(turf.lineString([a,b]),polygon))
+  const directKm=segmentDistance(from,to)
+  if(clear(from,to))return turf.lineString([from,to],{
+    safe:true,blocked:false,distanceKm:directKm,directKm,detourKm:0,
+    algorithm:'visibility-graph-a-star',safetyBufferKm:routeSafetyBufferKm
   })
-  const distance=Array(nodes.length).fill(Infinity),previous=Array(nodes.length).fill(-1),visited=new Set()
-  distance[0]=0
-  while(visited.size<nodes.length){
-    let current=-1
-    for(let i=0;i<nodes.length;i++)if(!visited.has(i)&&(current<0||distance[i]<distance[current]))current=i
-    if(current<0||!Number.isFinite(distance[current])||current===1)break
-    visited.add(current)
-    for(let next=0;next<nodes.length;next++){
-      if(next===current||visited.has(next)||!clear(nodes[current],nodes[next]))continue
-      const candidate=distance[current]+turf.distance(turf.point(nodes[current]),turf.point(nodes[next]),{units:'kilometers'})
-      if(candidate<distance[next]){distance[next]=candidate;previous[next]=current}
+
+  // 使用禁飞区原始顶点向外偏移生成候选绕行点，适用于矩形与不规则多边形。
+  const nodes=[from,to]
+  restrictions.forEach(zone=>{
+    const polygon=turf.polygon(zone.coordinates)
+    const center=turf.centroid(polygon)
+    const rings=zone.coordinates||[]
+    rings.forEach(ring=>ring.slice(0,-1).forEach(vertex=>{
+      const bearing=turf.bearing(center,turf.point(vertex))
+      const escaped=turf.destination(
+        turf.point(vertex),
+        routeSafetyBufferKm+.06,
+        bearing,
+        {units:'kilometers'}
+      ).geometry.coordinates
+      if(!obstacles.some(obstacle=>turf.booleanPointInPolygon(turf.point(escaped),obstacle)))nodes.push(escaped)
+    }))
+  })
+
+  // 去除距离过近的重复节点，降低可视图的连边数量。
+  const uniqueNodes=nodes.filter((node,index,list)=>list.findIndex(other=>segmentDistance(node,other)<.015)===index)
+  const gScore=Array(uniqueNodes.length).fill(Infinity)
+  const fScore=Array(uniqueNodes.length).fill(Infinity)
+  const previous=Array(uniqueNodes.length).fill(-1)
+  const open=new Set([0])
+  gScore[0]=0
+  fScore[0]=segmentDistance(uniqueNodes[0],uniqueNodes[1])
+
+  // A*在所有互相可见的候选点之间寻找真实距离最短的安全路径。
+  while(open.size){
+    let current=[...open].reduce((best,index)=>fScore[index]<fScore[best]?index:best)
+    if(current===1)break
+    open.delete(current)
+    for(let next=0;next<uniqueNodes.length;next++){
+      if(next===current||!clear(uniqueNodes[current],uniqueNodes[next]))continue
+      const candidate=gScore[current]+segmentDistance(uniqueNodes[current],uniqueNodes[next])
+      if(candidate>=gScore[next])continue
+      previous[next]=current
+      gScore[next]=candidate
+      fScore[next]=candidate+segmentDistance(uniqueNodes[next],uniqueNodes[1])
+      open.add(next)
     }
   }
-  if(previous[1]<0)return turf.lineString([from,to],{safe:false,blocked:true})
+  if(previous[1]<0)return turf.lineString([from,to],{
+    safe:false,blocked:true,distanceKm:directKm,directKm,
+    algorithm:'visibility-graph-a-star',safetyBufferKm:routeSafetyBufferKm
+  })
   const route=[];let cursor=1
-  while(cursor>=0){route.unshift(nodes[cursor]);cursor=previous[cursor]}
+  while(cursor>=0){route.unshift(uniqueNodes[cursor]);cursor=previous[cursor]}
   const safe=!route.slice(0,-1).some((point,index)=>!clear(point,route[index+1]))
-  return turf.lineString(route,{safe,blocked:!safe})
+  const distanceKm=route.slice(0,-1).reduce((sum,point,index)=>sum+segmentDistance(point,route[index+1]),0)
+  return turf.lineString(route,{
+    safe,blocked:!safe,distanceKm,directKm,detourKm:Math.max(0,distanceKm-directKm),
+    algorithm:'visibility-graph-a-star',safetyBufferKm:routeSafetyBufferKm
+  })
 }
-const directRouteBlocked = computed(()=>directAirLine.value?restrictions.some(zone=>turf.booleanIntersects(directAirLine.value,turf.polygon(zone.coordinates))):false)
+const directRouteBlocked = computed(()=>directAirLine.value?bufferedRestrictions().some(zone=>turf.booleanIntersects(directAirLine.value,zone)):false)
 const safeAirLine = computed(()=>{
   if(!directAirLine.value)return null
   const [a,b]=[directAirLine.value.geometry.coordinates[0],directAirLine.value.geometry.coordinates.at(-1)]
   return buildSafeLeg(a,b)
 })
 const airLine = computed(()=>selectedRoute.value==='direct'?directAirLine.value:safeAirLine.value)
-const routeIsSafe = computed(()=>selectedRoute.value!=='direct'&&airLine.value?.properties?.safe!==false&&!restrictions.some(zone=>turf.booleanIntersects(airLine.value,turf.polygon(zone.coordinates))))
+const routeIsSafe = computed(()=>selectedRoute.value!=='direct'&&airLine.value?.properties?.safe!==false&&!bufferedRestrictions().some(zone=>turf.booleanIntersects(airLine.value,zone)))
 const airKm=computed(()=>airLine.value?turf.length(airLine.value,{units:'kilometers'}):0)
 const airMinutes=computed(()=>Math.max(4,Math.round(airKm.value/.72+3)))
 
@@ -1254,12 +1295,24 @@ function showPlannedRoute(task){
   const base=stations.find(s=>s.id===drone.baseId)||stations[0]
   const batchStops=(task.batchTaskIds||[]).map(id=>tasks.value.find(t=>t.id===id)?.destination).filter(Boolean)
   const lastStop=batchStops.at(-1)||task.destination
-  const returnBase=[...stations].sort((a,b)=>turf.distance(turf.point(a.coordinates),turf.point(lastStop))-turf.distance(turf.point(b.coordinates),turf.point(lastStop)))[0]
+  const returnBase=[...stations].sort((a,b)=>{
+    const routeA=buildSafeLeg(lastStop,a.coordinates)
+    const routeB=buildSafeLeg(lastStop,b.coordinates)
+    return (routeA.properties.distanceKm||Infinity)-(routeB.properties.distanceKm||Infinity)
+  })[0]
   const deliveryStops=[task.destination,...batchStops]
+  const annotateLeg=(route,leg,name)=>({
+    ...route,
+    properties:{...route.properties,taskId:task.id,leg,name}
+  })
   const features=[
-    {...buildSafeLeg(base.coordinates,supplier.coordinates),properties:{taskId:task.id,leg:'reposition',name:'保障基地→供给点'}},
-    ...deliveryStops.map((stop,index)=>({...buildSafeLeg(index?deliveryStops[index-1]:supplier.coordinates,stop),properties:{taskId:task.id,leg:'delivery',name:index?'需求医院→下一需求医院':'供给点→需求医院'}})),
-    {...buildSafeLeg(deliveryStops.at(-1),returnBase.coordinates),properties:{taskId:task.id,leg:'return',name:'最后需求医院→返航基地'}}
+    annotateLeg(buildSafeLeg(base.coordinates,supplier.coordinates),'reposition','保障基地→供给点'),
+    ...deliveryStops.map((stop,index)=>annotateLeg(
+      buildSafeLeg(index?deliveryStops[index-1]:supplier.coordinates,stop),
+      'delivery',
+      index?'需求医院→下一需求医院':'供给点→需求医院'
+    )),
+    annotateLeg(buildSafeLeg(deliveryStops.at(-1),returnBase.coordinates),'return','最后需求医院→返航基地')
   ]
   const route=turf.featureCollection(features)
   addSource('planned-flight',route)
