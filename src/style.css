@@ -881,3 +881,50 @@ aside select,
       0 0 28px #e4a65f;
   }
 }
+
+/* ========== 新增图例样式 ========== */
+
+/* 禁飞区图例 - 红色斜条纹 */
+.legend .no-fly {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  background: repeating-linear-gradient(
+    -45deg,
+    #ff365e 0px,
+    #ff365e 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  border-radius: 4px;
+  border: 1px solid #ff365e;
+  flex-shrink: 0;
+}
+
+/* 车辆图标 - 带底色圆框 */
+.legend .vehicle-icon {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  background: #f0a23c;
+  border-radius: 50%;
+  font-size: 11px;
+  font-style: normal;
+  border: 1px solid #ffffffaa;
+  flex-shrink: 0;
+}
+
+/* 无人机图标 - 带底色圆框 */
+.legend .drone-icon {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  background: #3a8fd4;
+  border-radius: 50%;
+  font-size: 11px;
+  font-style: normal;
+  border: 1px solid #ffffffaa;
+  flex-shrink: 0;
+}
