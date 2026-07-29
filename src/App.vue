@@ -948,8 +948,13 @@ function startGeoCanvasWindAnimation(){
         resetParticle(particle)
         return
       }
-      const color=next.speed>=12?'255,64,92':next.speed>=8?'255,203,68':'76,226,244'
-      ctx.strokeStyle=`rgba(${color},.7)`
+      const lightBasemap=basemap.value==='streets'||basemap.value==='light'
+      const color=next.speed>=12
+        ?(lightBasemap?'202,28,64':'255,64,92')
+        :next.speed>=8
+          ?(lightBasemap?'211,118,0':'255,203,68')
+          :(lightBasemap?'0,84,190':'76,226,244')
+      ctx.strokeStyle=`rgba(${color},${lightBasemap ? .9 : .7})`
       ctx.beginPath()
       ctx.moveTo(from.x,from.y)
       ctx.lineTo(to.x,to.y)
@@ -969,6 +974,8 @@ function startGroundWindAnimation(){
     return
   }
   const canvas=map.getCanvas()
+  const lightBasemap=basemap.value==='streets'||basemap.value==='light'
+  const windColor=lightBasemap?'#0060c7':'#4ce2f4'
   const particleCount=Math.max(180,Math.round(canvas.clientWidth*canvas.clientHeight/3400))
   geoWindParticles=Array.from({length:particleCount},(_,index)=>{
     const coordinates=screenWindPoint(index,particleCount)
@@ -979,19 +986,22 @@ function startGroundWindAnimation(){
   if(!map.getLayer('weather-wind-3d-glow')){
     map.addLayer({
       id:'weather-wind-3d-glow',type:'line',source:'weather-wind-3d',minzoom:9,maxzoom:20,
-      layout:{'line-elevation-reference':'ground','line-cap':'round','line-join':'round'},
-      paint:{'line-width':5.2,'line-color':'#4ce2f4','line-opacity':.3,'line-blur':2.2}
+      layout:{'line-cap':'round','line-join':'round'},
+      paint:{'line-width':5.2,'line-color':windColor,'line-opacity':lightBasemap ? .4 : .3,'line-blur':2.2}
     })
   }
   if(!map.getLayer('weather-wind-3d')){
     map.addLayer({
       id:'weather-wind-3d',type:'line',source:'weather-wind-3d',minzoom:9,maxzoom:20,
-      layout:{'line-elevation-reference':'ground','line-cap':'round','line-join':'round'},
+      layout:{'line-cap':'round','line-join':'round'},
       paint:{
         'line-width':1.65,
         'line-emissive-strength':1,
         'line-gradient':['interpolate',['linear'],['line-progress'],
-          0,'rgba(76,226,244,0)',.42,'rgba(76,226,244,.12)',.82,'rgba(76,226,244,.46)',1,'rgba(76,226,244,.78)']
+          0,lightBasemap?'rgba(0,96,199,0)':'rgba(76,226,244,0)',
+          .42,lightBasemap?'rgba(0,96,199,.2)':'rgba(76,226,244,.12)',
+          .82,lightBasemap?'rgba(0,96,199,.62)':'rgba(76,226,244,.46)',
+          1,lightBasemap?'rgba(0,72,165,.95)':'rgba(76,226,244,.78)']
       }
     })
   }
@@ -1115,7 +1125,12 @@ function restoreLayers(){
   map.addLayer({id:'coverage',type:'fill',source:'coverage',paint:{'fill-color':'#24d7ff','fill-opacity':.055}})
   map.addLayer({id:'restrictions',type:'fill',source:'restrictions',paint:{'fill-color':'#ff365e','fill-opacity':.24}})
   const label=map.getStyle().layers.find(l=>l.type==='symbol'&&l.layout?.['text-field'])
-  if(map.getSource('composite'))map.addLayer({id:'buildings',source:'composite','source-layer':'building',filter:['==',['get','extrude'],'true'],type:'fill-extrusion',minzoom:13.5,paint:{'fill-extrusion-color':['interpolate',['linear'],['get','height'],0,'#102842',120,'#2371a3',300,'#4bdfff'],'fill-extrusion-height':['get','height'],'fill-extrusion-base':['get','min_height'],'fill-extrusion-opacity':.68}},label?.id)
+  const buildingColors=basemap.value==='streets'
+    ?['#ead9c3','#c58f5c','#895334']
+    :basemap.value==='light'
+      ?['#e8d9c7','#c3996c','#8c6244']
+      :['#102842','#2371a3','#4bdfff']
+  if(map.getSource('composite'))map.addLayer({id:'buildings',source:'composite','source-layer':'building',filter:['==',['get','extrude'],'true'],type:'fill-extrusion',minzoom:13.5,paint:{'fill-extrusion-color':['interpolate',['linear'],['get','height'],0,buildingColors[0],120,buildingColors[1],300,buildingColors[2]],'fill-extrusion-height':['get','height'],'fill-extrusion-base':['get','min_height'],'fill-extrusion-opacity':basemap.value==='dark'?.68:.7}},label?.id)
   addSemanticMarkers();updateMapData();
   applyLayerVisibility()
   nextTick(()=>{
@@ -1546,7 +1561,7 @@ onBeforeUnmount(()=>{clearInterval(flightTimer);clearInterval(groundTimer);clear
     <main>
       <section class="map-wrap" :class="{mode3d:mapMode==='3d',flightContext:page==='flight'}"><div id="map"></div>
         
-        <canvas v-show="windCanvasVisible && !capacityPage && mapMode==='2d'" ref="windCanvas" class="wind-particles"></canvas>
+        <canvas v-show="windCanvasVisible && !capacityPage && mapMode==='2d'" ref="windCanvas" class="wind-particles" :class="`basemap-${basemap}`"></canvas>
         <div class="map-top glass"><button :class="{active:mapMode==='2d'}" @click="setMapView('2d')">2D态势</button><button :class="{active:mapMode==='3d'}" @click="setMapView('3d')">3D低空</button><button :class="{active:rotateMode}" @click="toggleRotate">{{rotateMode?'退出自由观察':'自由观察'}}</button><button @click="resetNorth">归正</button><label><input v-model="followDrone" type="checkbox">镜头跟随</label><button class="compass" :style="{transform:`rotate(${-mapBearing}deg)`}" @click="resetNorth"><b>N</b>▲</button></div>
         <div class="camera-hud glass">方向 {{mapBearing}}°　倾角 {{mapPitch}}°　缩放 {{mapZoom}}　·　{{poiLevel}}</div>
         <details class="layers glass"><summary>底图与图层</summary><label class="basemap-choice">地图风格<select v-model="basemap" @change="changeBasemap"><option v-for="(option,key) in basemapOptions" :key="key" :value="key">{{option.name}}</option></select></label><label class="remember-basemap"><input v-model="rememberBasemap" type="checkbox" @change="changeBasemapMemory">记住底图选择</label><div class="layer-divider">业务图层</div><label v-for="(_,key) in layerVisible" :key="key"><input v-model="layerVisible[key]" type="checkbox">{{({hospitals:'医院',supply:'供给机构',bases:'保障基地',coverage:'站点建议服务范围（仿真）',restrictions:'管制区',weather:'风向与风速',ground:'地面路线',air:'低空航线',buildings:'三维建筑'})[key]}}</label></details>
