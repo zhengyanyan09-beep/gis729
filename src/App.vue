@@ -1571,14 +1571,10 @@ onBeforeUnmount(()=>{clearInterval(flightTimer);clearInterval(groundTimer);clear
   <span><i class="route delivery"></i>载货</span>
   <span><i class="route returning"></i>返航</span>
 
-  <!-- ====== 新增图例 ====== -->
-  <!-- 禁飞区 - 与地图 restrictions 图层颜色一致 (#ff365e) -->
+  <!-- 禁飞区 -->
   <span><i class="no-fly"></i>禁飞区</span>
 
-  <!-- 车辆 - 地面配送车辆 -->
-  <span><i class="vehicle-icon"></i>车辆</span>
-
-  <!-- 无人机 - 执行任务的无人机 -->
+  <!-- 无人机 - 与地图无人机样式一致 -->
   <span><i class="drone-icon"></i>无人机</span>
 </div>
         <div v-if="!capacityPage" class="weather-hud glass" :class="{collapsed:weatherCollapsed}"><div class="weather-title" @click="weatherCollapsed=!weatherCollapsed"><b>{{weather.temperature}}℃</b><span>{{displayedWind.label}} {{displayedWind.speed}}m/s</span><button>{{weatherCollapsed?'展开天气':'收起'}}</button></div><template v-if="!weatherCollapsed"><div class="wind-level"><button :class="{active:windLevel==='surface'}" @click="setWindLevel('surface')">地表10米</button><button :class="{active:windLevel==='lowair'}" @click="setWindLevel('lowair')">低空120米</button></div><p><span>适航判断 {{weatherAssessment.level}}</span><span>风的来向 {{displayedWind.direction}}°</span><span>阵风 {{weather.gust}}m/s</span><span>降水 {{weather.precipitation}}mm</span><span>能见度 {{weather.visibility}}km</span></p><small>{{weather.source}} · {{weather.updatedAt}} · 缩放或移动后按当前视窗重新采样</small><button class="weather-refresh" @click="refreshWeather">{{weatherLoading?'更新中':'更新天气'}}</button></template></div>
