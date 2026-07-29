@@ -35,3 +35,849 @@ aside{position:relative;background:linear-gradient(180deg,#08182b,#0a2036);borde
 .uav-ground{width:15px;height:15px;border:1px solid #79f6ff;border-radius:50%;background:#34dff744;box-shadow:0 0 0 7px #32dff719,0 0 18px #3eeaff}.uav-ground i{display:block;width:3px;height:3px;margin:5px;border-radius:50%;background:#fff}.air-location{margin:10px 0;padding:11px 13px;background:#092d43;border-left:3px solid #45e8f4;border-radius:7px}.air-location b,.air-location strong{display:block}.air-location b{font-size:8px;color:#7fa7bd}.air-location strong{margin-top:4px;color:#65edf6;font-size:14px}
 .map-wrap:not(.mode3d) .uav:after,.map-wrap:not(.mode3d) .uav-ground{display:none}
 .map-wrap:not(.flightContext) .uav,.map-wrap:not(.flightContext) .uav-ground{display:none!important}
+/* ArcGIS Pro Dark Theme Color Override */
+:root{
+  color:#f1f1f1;
+  background:#202020;
+}
+
+/* 基础界面 */
+body,
+.shell,
+.map-wrap,
+.screen .map-wrap{
+  background:#202020;
+  color:#f1f1f1;
+}
+
+.shell>header{
+  background:#2b2b2b;
+  border-bottom-color:#484848;
+}
+
+aside{
+  background:linear-gradient(180deg,#2b2b2b,#242424);
+  border-left-color:#484848;
+}
+
+.glass,
+.screen aside,
+.messages,
+.shared-flight-hud{
+  background:#2b2b2bf2;
+  border-color:#555;
+  box-shadow:0 10px 30px #0008;
+}
+
+.brand>i{
+  border-color:#5b9bd5;
+  color:#5b9bd5;
+  box-shadow:0 0 18px #5b9bd555;
+}
+
+.brand span,
+aside>p,
+aside template p,
+.login-box p{
+  color:#b7b7b7;
+}
+
+.hero-copy em,
+.login-box em,
+aside>em{
+  color:#6baed6;
+}
+
+.shell nav button{
+  color:#c5c5c5;
+}
+
+.shell nav button.active{
+  color:#fff;
+  border-color:#5b9bd5;
+  background:linear-gradient(to top,#5b9bd528,transparent);
+}
+
+/* 按钮与表单 */
+.primary{
+  background:linear-gradient(135deg,#007ac2,#005e95);
+  color:#fff;
+  box-shadow:0 7px 22px #007ac244;
+}
+
+.secondary,
+.head-actions button,
+.map-top button,
+.mode-choice button,
+.flight-switch button,
+.fleet-actions button{
+  background:#3a3a3a;
+  border-color:#606060;
+  color:#e4e4e4;
+}
+
+.secondary:hover,
+.head-actions button:hover,
+.map-top button:hover,
+.mode-choice button:hover,
+.flight-switch button:hover,
+.fleet-actions button:hover{
+  border-color:#6baed6;
+  color:#fff;
+}
+
+.map-top button.active,
+.mode-choice button.active,
+.flight-switch button.active,
+.wind-level button.active{
+  color:#fff!important;
+  border-color:#5b9bd5!important;
+  background:#214f70!important;
+  box-shadow:0 0 14px #5b9bd544;
+}
+
+.form input,
+.form select,
+.form textarea,
+aside select,
+.add-drone input,
+.add-drone select,
+.material-line input,
+.material-line select,
+.custom-line input,
+.layers .basemap-choice select{
+  background:#333;
+  border-color:#606060;
+  color:#f1f1f1;
+}
+
+.login{
+  background:#202020;
+}
+
+.login-hero{
+  background:
+    radial-gradient(circle at 70% 40%,#007ac233,transparent 32%),
+    linear-gradient(145deg,#202020,#263746 60%,#214f70);
+}
+
+.login-hero:after{
+  background-image:
+    linear-gradient(#6baed60c 1px,transparent 1px),
+    linear-gradient(90deg,#6baed60c 1px,transparent 1px);
+}
+
+.login-box{
+  background:#f3f3f3;
+  color:#252525;
+}
+
+.login-box input,
+.login-box select{
+  background:#fff;
+  border-color:#bdbdbd;
+  color:#252525;
+}
+
+.register-entry button,
+.back-login{
+  color:#007ac2;
+}
+
+.register-message{
+  background:#d9edf7;
+  color:#246078!important;
+}
+
+/* 卡片与容器 */
+.metrics div,
+.task,
+.inventory,
+.approval,
+.drone,
+.summary,
+.choice,
+.route-cards>div,
+.telemetry div,
+.base-row div,
+.analytics-kpi div,
+.capacity-risks p,
+.schema-grid div,
+.add-drone,
+.material-picker,
+.coroute,
+.traffic-now,
+.station-chart,
+.flight-stage,
+.launch-orders,
+.live-flight,
+.wall-flight{
+  background:#303030;
+  border-color:#555;
+  color:#f1f1f1;
+}
+
+.metrics b,
+.analytics-kpi b,
+.wall-metrics b,
+.route-cards strong,
+.telemetry b,
+.capacity-risks b,
+.station-chart strong{
+  color:#6baed6;
+}
+
+.metrics span,
+.analytics-kpi span,
+.wall-metrics span,
+.route-cards span,
+.telemetry span,
+.capacity-risks span,
+.station-chart span,
+.task span,
+.task p,
+.task small,
+.inventory p,
+.approval p,
+.drone p,
+.choice span{
+  color:#b7b7b7;
+}
+
+.choice.selected{
+  border-color:#5b9bd5;
+  background:#29485f;
+}
+
+.task.history{
+  border-color:#666;
+}
+
+/* 主信息色 */
+.blue{
+  background:#007ac2;
+}
+
+.cyan{
+  background:#6baed6;
+}
+
+.green{
+  background:#2e8b57;
+}
+
+.red{
+  background:#d9534f;
+}
+
+.legend i{
+  border-color:#ffffffaa;
+  color:#fff;
+}
+
+.legend i.orange{
+  background:#d9822b;
+}
+
+.legend i.purple{
+  background:#8064a2;
+}
+
+.legend i.reposition{
+  background:#8064a2;
+}
+
+.legend i.delivery{
+  background:#6baed6;
+}
+
+.legend i.returning{
+  background:#4cae7b;
+}
+
+/* 地图兴趣点 */
+.poi.hospital i{
+  background:#007ac2;
+  color:#6baed6;
+}
+
+.poi.supply i,
+.poi.blood i{
+  background:#c94c4c;
+  color:#ef8a8a;
+}
+
+.poi.base i{
+  background:#388e6c;
+  color:#6fd1ac;
+}
+
+.poi.hospital.demand i{
+  background:#d9822b;
+  color:#f5b56b;
+}
+
+.poi.hospital.supplying i{
+  background:#8064a2;
+  color:#b8a4d8;
+}
+
+.poi.blood.supplying i{
+  box-shadow:0 0 0 5px #8064a255,0 0 23px #a58ac7;
+  color:#fff;
+}
+
+.poi.demand span{
+  border-color:#d9822b;
+  color:#f2c18c;
+}
+
+.poi.supplying span{
+  border-color:#8064a2;
+  color:#d5c9e8;
+}
+
+.poi span{
+  background:#2b2b2bf2;
+  border-color:#606060;
+  color:#f1f1f1;
+}
+
+.poi.registered i{
+  box-shadow:0 0 0 4px #5b9bd533,0 0 22px #5b9bd5;
+  color:#dceeff;
+}
+
+.poi.current-org i{
+  background:#007ac2!important;
+  color:#fff!important;
+  border-color:#c8e6f5!important;
+  box-shadow:0 0 0 6px #5b9bd533,0 0 28px #5b9bd5!important;
+}
+
+.poi.current-org span{
+  border-color:#6baed6;
+  color:#fff;
+}
+
+.poi.current-org span:before{
+  color:#6baed6;
+}
+
+/* 无人机与定位 */
+.uav{
+  color:#6baed6;
+  filter:drop-shadow(0 0 9px #5b9bd5);
+}
+
+.uav span{
+  background:#303030;
+  color:#f1f1f1;
+}
+
+.uav-ground{
+  border-color:#9dc9e2;
+  background:#5b9bd544;
+  box-shadow:0 0 0 7px #5b9bd519,0 0 18px #6baed6;
+}
+
+.view-anchor{
+  color:#9dc9e2;
+  text-shadow:0 2px 5px #000;
+}
+
+.view-anchor i{
+  border-color:#6baed6;
+  box-shadow:0 0 16px #5b9bd588;
+}
+
+.view-anchor i:before,
+.view-anchor i:after{
+  background:#6baed6;
+}
+
+.view-anchor small{
+  background:#242424dd;
+  color:#d0d0d0;
+}
+
+.air-location{
+  background:#29485f;
+  border-left-color:#6baed6;
+}
+
+.air-location b{
+  color:#b7b7b7;
+}
+
+.air-location strong{
+  color:#9dc9e2;
+}
+
+/* 弹窗 */
+.mapboxgl-popup-content{
+  background:#303030!important;
+  color:#f1f1f1!important;
+  border-color:#666;
+  box-shadow:0 12px 34px #0009!important;
+}
+
+.mapboxgl-popup-content b,
+.mapboxgl-popup-content strong{
+  color:#6baed6!important;
+}
+
+.mapboxgl-popup-close-button{
+  color:#d0d0d0!important;
+}
+
+.mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip{
+  border-top-color:#666!important;
+}
+
+.mapboxgl-popup-anchor-top .mapboxgl-popup-tip{
+  border-bottom-color:#666!important;
+}
+
+.mapboxgl-popup-anchor-left .mapboxgl-popup-tip{
+  border-right-color:#666!important;
+}
+
+.mapboxgl-popup-anchor-right .mapboxgl-popup-tip{
+  border-left-color:#666!important;
+}
+
+/* 成功状态 */
+.inventory .online,
+.coroute .ok i,
+.weather-check strong{
+  color:#55b995;
+}
+
+.inventory em,
+.recommended{
+  background:#4cae7b;
+  color:#fff;
+}
+
+.coroute>div.ok,
+.transport-recommend,
+.weather-check{
+  background:#294039;
+  border-color:#4cae7b;
+}
+
+.coroute>div.ok{
+  border-left-color:#4cae7b;
+}
+
+.coroute>div.selected{
+  outline-color:#6fc7a6;
+  box-shadow:0 0 16px #4cae7b33;
+}
+
+.transport-recommend b,
+.weather-check strong{
+  color:#6fc7a6;
+}
+
+/* 警告状态 */
+.arrival-alert{
+  background:#4a3325f2;
+  border-color:#d9822b;
+  box-shadow:0 0 28px #d9822b44;
+}
+
+.arrival-alert b{
+  color:#f2c18c;
+}
+
+.arrival-alert span{
+  color:#d8b896;
+}
+
+.arrival-alert button{
+  background:#d9822b;
+  color:#fff;
+}
+
+.waiting,
+.weather-check.warning,
+.ground-monitor,
+.transport-recommend.ground,
+.supply-lock{
+  background:#463a25;
+  border-color:#a87932;
+}
+
+.waiting,
+.weather-check.warning strong,
+.ground-monitor b,
+.transport-recommend.ground b,
+.supply-lock b{
+  color:#f2c15f;
+}
+
+.ground-monitor span,
+.ground-monitor small,
+.transport-recommend.ground p,
+.supply-lock span{
+  color:#d3c29e;
+}
+
+.supply-lock i{
+  color:#aa966d;
+}
+
+.ground-btn{
+  background:linear-gradient(135deg,#c77427,#d99a39);
+}
+
+.task.receiptTodo{
+  border-color:#d9822b;
+  background:linear-gradient(135deg,#463322,#303030);
+  box-shadow:0 0 22px #d9822b33;
+}
+
+.task.receiptTodo>div>i{
+  background:#d9822b;
+  color:#fff;
+}
+
+.task.receiptTodo:before{
+  background:#d9822b22;
+  color:#f2c18c;
+}
+
+/* 危险与错误 */
+.alert-strip,
+.airspace-check.blocked,
+.weather-check.danger{
+  background:#472a2a;
+  border-color:#c94c4c;
+}
+
+.alert-strip span{
+  color:#e6a2a2;
+}
+
+.weather-check.danger strong,
+.drone span.bad{
+  color:#ef7777;
+}
+
+.fleet-actions .delete{
+  color:#ef8a8a;
+  border-color:#8d4b4b;
+}
+
+.add-drone .delete,
+.material-line button{
+  background:#4a2929;
+  border-color:#8d4b4b;
+  color:#ef9a9a;
+}
+
+.head-actions .cancel-account{
+  background:#472a2a;
+  border-color:#8d4b4b;
+  color:#ef9a9a;
+}
+
+/* 航空与天气 */
+.airspace-check{
+  background:#294039;
+  border-color:#4cae7b;
+}
+
+.airspace-check span{
+  color:#d5c5c5;
+}
+
+.airspace-check small{
+  color:#aaa;
+}
+
+.weather-hud,
+.camera-hud,
+.layers{
+  background:#2b2b2be8;
+  border-color:#555;
+}
+
+.weather-hud>div b,
+.weather-points b,
+.weather-check button,
+.weather-hud button,
+.locate-institution{
+  color:#6baed6;
+}
+
+.weather-hud>div span{
+  color:#6fc7a6;
+}
+
+.weather-hud p span,
+.weather-points span{
+  background:#383838;
+}
+
+.weather-hud small,
+.weather-check small{
+  color:#aaa;
+}
+
+.weather-check button,
+.weather-hud button{
+  background:#3a3a3a;
+  border-color:#606060;
+}
+
+/* 进度条 */
+.live-flight>i,
+.flight-stage>i,
+.battery,
+.efficiency>i,
+.station-chart>div>i{
+  background:#484848;
+}
+
+.live-flight>i em,
+.flight-stage>i em,
+.efficiency>i em,
+.station-chart>div>i em{
+  background:linear-gradient(90deg,#007ac2,#6baed6);
+}
+
+.battery i{
+  background:#4cae7b;
+}
+
+.efficiency>i em.low,
+.fleet-grid .battery i.low{
+  background:linear-gradient(90deg,#c94c4c,#df7b5a);
+}
+
+.ground-monitor>i{
+  background:#5a4930;
+}
+
+.ground-monitor>i em{
+  background:linear-gradient(90deg,#c77427,#f2c15f);
+}
+
+/* 图表 */
+.donut{
+  background:conic-gradient(
+    #007ac2 0 52%,
+    #4cae7b 52% 76%,
+    #c94c72 76% 92%,
+    #d9b44a 92%
+  );
+}
+
+.donut:after{
+  background:#303030;
+}
+
+.c1{
+  background:#007ac2;
+}
+
+.c2{
+  background:#4cae7b;
+}
+
+.c3{
+  background:#c94c72;
+}
+
+.c4{
+  background:#d9b44a;
+}
+
+.trend-bars{
+  background:#303030;
+}
+
+.trend-bars i{
+  background:linear-gradient(#6baed6,#007ac2);
+}
+
+/* 路线与协同 */
+.coroute>p,
+.coroute span,
+.coroute small{
+  color:#b7b7b7;
+}
+
+.coroute>div{
+  background:#353535;
+  border-left-color:#777;
+}
+
+.coroute i{
+  color:#c5c5c5;
+}
+
+.coroute>div.manual{
+  border-left-color:#d49a43;
+}
+
+.coroute>div.manual i{
+  color:#e4b665;
+}
+
+.coroute>div.manual.selected{
+  outline-color:#d49a43;
+  box-shadow:0 0 16px #d49a4333;
+}
+
+/* 状态、文字与徽标 */
+.toast{
+  background:#007ac2;
+  color:#fff;
+}
+
+.count{
+  background:#3f5362;
+  color:#d9edf7;
+}
+
+.approval.prominent{
+  border-color:#5b9bd5;
+  box-shadow:0 0 24px #5b9bd522;
+}
+
+.approval.prominent>div:first-child span{
+  color:#e4b665;
+}
+
+.flight-help{
+  background:#303b43;
+  border-left-color:#6baed6;
+  color:#c0ccd3;
+}
+
+.live-flight>b,
+.wall-flight b,
+.shared-flight-hud>strong,
+.shared-flight-hud small,
+.launch-orders span,
+.flight-stage span,
+.coordinate{
+  color:#6baed6;
+}
+
+.coordinate{
+  background:#292929;
+}
+
+.shared-flight-hud p span{
+  background:#383838;
+  color:#d0d0d0;
+}
+
+/* 消息与通知 */
+.messages{
+  background:#2b2b2bf5;
+  border-color:#555;
+}
+
+.messages>div{
+  border-top-color:#484848;
+}
+
+.messages p{
+  color:#b7b7b7;
+}
+
+.messages small{
+  color:#6baed6;
+}
+
+.shell nav i,
+.bell i{
+  background:#c94c4c;
+  color:#fff;
+}
+
+/* 材料选择 */
+.material-picker{
+  background:#303030;
+  border-color:#555;
+}
+
+.material-picker h3 small{
+  color:#aaa;
+}
+
+.material-grid button{
+  background:#393939;
+  border-color:#555;
+  color:#d0d0d0;
+}
+
+.material-grid button i{
+  background:#4a4a4a;
+  color:#9dc9e2;
+}
+
+.material-grid button.selected{
+  border-color:#5b9bd5;
+  background:#29485f;
+  color:#fff;
+}
+
+.material-grid button.selected i{
+  background:#5b9bd5;
+  color:#fff;
+}
+
+.material-line{
+  border-top-color:#4a4a4a;
+}
+
+.custom-line{
+  border-top-color:#555;
+}
+
+/* 分隔线和辅助边框 */
+.task details small{
+  border-left-color:#6baed6;
+}
+
+.inventory p,
+.launch-orders>div,
+.material-line{
+  border-top-color:#484848;
+}
+
+.layer-divider{
+  border-top-color:#484848;
+  color:#999;
+}
+
+.layers summary,
+.layers .basemap-choice{
+  color:#6baed6;
+}
+
+.layers label,
+.layers .remember-basemap{
+  color:#c5c5c5;
+}
+
+/* 动画仅替换颜色 */
+@keyframes demand-pulse{
+  0%,100%{
+    box-shadow:
+      0 0 0 0 #d9822b66,
+      0 0 15px #d9822b;
+  }
+  50%{
+    box-shadow:
+      0 0 0 9px #d9822b00,
+      0 0 28px #e4a65f;
+  }
+}
