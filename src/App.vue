@@ -807,11 +807,15 @@ function windVectorAt(coordinates){
 }
 
 function randomWindPoint(){
-  const bounds=map.getBounds()
-  return [
-    bounds.getWest()+Math.random()*(bounds.getEast()-bounds.getWest()),
-    bounds.getSouth()+Math.random()*(bounds.getNorth()-bounds.getSouth())
-  ]
+  const canvas=map.getCanvas()
+  const padding=8
+  const width=Math.max(1,canvas.clientWidth-padding*2)
+  const height=Math.max(1,canvas.clientHeight-padding*2)
+  const point=map.unproject([
+    padding+Math.random()*width,
+    padding+Math.random()*height
+  ])
+  return [point.lng,point.lat]
 }
 
 function nextWindCoordinate(coordinates,particle){
@@ -853,7 +857,7 @@ function startGeoCanvasWindAnimation(){
   ctx.lineWidth=1.15
   ctx.lineCap='round'
   windParticles=Array.from(
-    {length:Math.max(110,Math.round(rect.width*rect.height/5000))},
+    {length:Math.max(180,Math.round(rect.width*rect.height/3400))},
     ()=>({coordinates:randomWindPoint(),age:Math.random()*80,max:80+Math.random()*90})
   )
   let cameraKey='',last=0
@@ -922,7 +926,7 @@ function startGeoCanvasWindAnimation(){
 function startGroundWindAnimation(){
   if(!map?.isStyleLoaded())return
   const canvas=map.getCanvas()
-  const particleCount=Math.max(110,Math.round(canvas.clientWidth*canvas.clientHeight/5000))
+  const particleCount=Math.max(180,Math.round(canvas.clientWidth*canvas.clientHeight/3400))
   geoWindParticles=Array.from({length:particleCount},()=>{
     const coordinates=randomWindPoint()
     return {coordinates,trail:[coordinates],age:Math.random()*70,max:75+Math.random()*90}
@@ -1030,6 +1034,11 @@ function changeBasemap(){
   if(!map||!basemapOptions[basemap.value])return
   if(rememberBasemap.value)localStorage.setItem('medical-basemap-v1',basemap.value)
   map.setStyle(basemapOptions[basemap.value].style)
+  map.once('idle',()=>{
+    updateWindVisibility()
+    drawWindLayer()
+    startWindAnimation()
+  })
   toast(`底图已切换为${basemapOptions[basemap.value].name}`)
 }
 function changeBasemapMemory(){
@@ -1040,8 +1049,11 @@ function changeBasemapMemory(){
 }
  function updateWindVisibility(){
    if(!map)return
-   const c=map.getCenter(),z=map.getZoom()
-   windCanvasVisible.value=!capacityPage.value&&layerVisible.value.weather&&z>=8.8&&z<=18&&c.lng>=121.0&&c.lng<=121.9&&c.lat>=30.7&&c.lat<=31.7
+   const bounds=map.getBounds(),z=map.getZoom()
+   const intersectsShanghai=
+     bounds.getEast()>=121.0&&bounds.getWest()<=121.9&&
+     bounds.getNorth()>=30.7&&bounds.getSouth()<=31.7
+   windCanvasVisible.value=!capacityPage.value&&layerVisible.value.weather&&z>=8.5&&z<=18&&intersectsShanghai
  }
 
 
@@ -1058,8 +1070,12 @@ function restoreLayers(){
   const label=map.getStyle().layers.find(l=>l.type==='symbol'&&l.layout?.['text-field'])
   if(map.getSource('composite'))map.addLayer({id:'buildings',source:'composite','source-layer':'building',filter:['==',['get','extrude'],'true'],type:'fill-extrusion',minzoom:13.5,paint:{'fill-extrusion-color':['interpolate',['linear'],['get','height'],0,'#102842',120,'#2371a3',300,'#4bdfff'],'fill-extrusion-height':['get','height'],'fill-extrusion-base':['get','min_height'],'fill-extrusion-opacity':.68}},label?.id)
   addSemanticMarkers();updateMapData();
-  // drawWindLayer();
   applyLayerVisibility()
+  nextTick(()=>{
+    updateWindVisibility()
+    drawWindLayer()
+    startWindAnimation()
+  })
   if(weather.value.updatedAt==='--')setTimeout(()=>map&&refreshWeather(),900)
   if(canViewFlight.value)nextTick(renderRemoteDrone)
   if(rotateMode.value)nextTick(applyRotateMode)
