@@ -884,22 +884,15 @@ aside select,
 
 /* ========== 新增图例样式 ========== */
 
-/* 禁飞区图例 - 与地图 restrictions 图层颜色一致 (#ff365e) */
+/* 禁飞区图例 - 与地图 restrictions 图层一致（纯色半透明） */
 .legend .no-fly {
   display: inline-block;
   width: 20px;
   height: 20px;
-  background: repeating-linear-gradient(
-    -45deg,
-    #ff365e 0px,
-    #ff365e 4px,
-    rgba(255, 54, 94, 0.25) 4px,
-    rgba(255, 54, 94, 0.25) 8px
-  );
+  background: rgba(255, 54, 94, 0.35);
   border-radius: 4px;
   border: 1.5px solid #ff365e;
   flex-shrink: 0;
-  box-shadow: 0 0 8px rgba(255, 54, 94, 0.25);
 }
 
 
