@@ -50,6 +50,10 @@ const trafficLoading = ref(false)
 const trafficStatus = ref('等待获取道路交通数据')
 const groundMinutes = ref(null)
 const groundDistance = ref(null)
+// ===== 新增：地面路线数据 =====
+const groundRouteData = ref(null)
+const groundRouteCoordinates = ref([])
+  
 const chartEl = ref()
 const windCanvas = ref()
 const asideEl = ref()
@@ -496,9 +500,27 @@ function supplierDecision(task,accept){
 }
 function openDispatch(task){
   if(!task)return
-  selectedTaskId.value=task.id;selectedSupplierId.value=task.supplierId||'';selectedDroneId.value='';selectedBatchTaskIds.value=[];groundMinutes.value=null;groundDistance.value=null;deliveryMode.value='air';dispatchStep.value=task.status==='调度分析中'?2:1
-  page.value='dispatch';messages.value.filter(m=>m.taskId===task.id&&m.role===ROLE.DISPATCH).forEach(m=>m.read=true);save()
-  nextTick(()=>{updateMapData();focusTask()})
+  selectedTaskId.value=task.id
+  selectedSupplierId.value=task.supplierId||''
+  selectedDroneId.value=''
+  selectedBatchTaskIds.value=[]
+  groundMinutes.value=null
+  groundDistance.value=null
+  // ===== 新增：重置地面路线数据 =====
+  groundRouteData.value=null
+  groundRouteCoordinates.value=[]
+  deliveryMode.value='air'
+  dispatchStep.value=task.status==='调度分析中'?2:1
+  page.value='dispatch'
+  messages.value.filter(m=>m.taskId===task.id&&m.role===ROLE.DISPATCH).forEach(m=>m.read=true)
+  save()
+  nextTick(()=>{
+    // ===== 新增：清除地面路线 =====
+    clearGroundRoute()
+    updateMapData()
+    focusTask()
+    applyLayerVisibility()
+  })
 }
 function openFlightMonitor(task){
   if(!task?.droneId){toast('该任务尚未分配无人机');return}
@@ -547,13 +569,26 @@ function chooseDrone(drone){
   selectedDroneId.value=drone.id
   nextTick(()=>showPlannedRoute(activeTask.value))
 }
-function confirmDrone(){
+
+async function confirmDrone(){
   const reservedPartner=coRouteCandidates.value.find(x=>selectedBatchTaskIds.value.includes(x.id)&&x.reservedDroneId)
   if(reservedPartner)selectedDroneId.value=reservedPartner.reservedDroneId
   const drone=candidateDrones.value.find(d=>d.id===selectedDroneId.value)||selectedDrone.value
-  if(!drone?.eligible){toast(reservedPartner?'该联运无人机的载重、电量或航程不满足合并任务':'请选择满足条件且未被其他任务占用的无人机');return}
-  selectedDroneId.value=drone.id;dispatchStep.value=3;refreshTraffic();analyzeRouteWeather();updateMapData();nextTick(()=>showPlannedRoute(activeTask.value))
+  if(!drone?.eligible){
+    toast(reservedPartner?'该联运无人机的载重、电量或航程不满足合并任务':'请选择满足条件且未被其他任务占用的无人机')
+    return
+  }
+  selectedDroneId.value=drone.id
+  dispatchStep.value=3
+  deliveryMode.value='air'
+  updateMapData()
+  nextTick(()=>showPlannedRoute(activeTask.value))
+  // ===== 新增：传入 fitRoute 参数 =====
+  await refreshTraffic(false)
+  await analyzeRouteWeather()
+  applyLayerVisibility()
 }
+  
 function issueTask(){
   const t=activeTask.value
   if(!routeIsSafe.value){toast('当前航线仍与禁飞区冲突，禁止下发无人机任务');return}
@@ -1071,7 +1106,13 @@ function initMap(){
   map.dragRotate.enable();map.dragRotate.enablePitch()
   map.addControl(new mapboxgl.NavigationControl({showCompass:true,visualizePitch:true}),'bottom-right')
   map.on('move',()=>{mapBearing.value=Math.round(map.getBearing());mapPitch.value=Math.round(map.getPitch());mapZoom.value=map.getZoom().toFixed(1);updateWindVisibility()})
-  map.on('resize',restartWindForSettledView)
+  // ===== 新增 =====
+  map.on('resize',()=>{
+    // 窗口变化时重新调整视图
+    if(groundRouteData.value)renderGroundRoute(groundRouteData.value,false)
+    restartWindForSettledView()
+  }) 
+ 
   // map.on('moveend',()=>{
   //   const nextMode=map.getPitch()>8?'3d':'2d',modeChanged=nextMode!==mapMode.value
   //   mapMode.value=nextMode;applyLayerVisibility();scheduleViewWeather()
@@ -1133,6 +1174,9 @@ function restoreLayers(){
       :['#102842','#2371a3','#4bdfff']
   if(map.getSource('composite'))map.addLayer({id:'buildings',source:'composite','source-layer':'building',filter:['==',['get','extrude'],'true'],type:'fill-extrusion',minzoom:13.5,paint:{'fill-extrusion-color':['interpolate',['linear'],['get','height'],0,buildingColors[0],120,buildingColors[1],300,buildingColors[2]],'fill-extrusion-height':['get','height'],'fill-extrusion-base':['get','min_height'],'fill-extrusion-opacity':basemap.value==='dark'?.68:.7}},label?.id)
   addSemanticMarkers();updateMapData();
+  // ===== 新增：恢复地面路线 =====
+  if(groundRouteData.value)renderGroundRoute(groundRouteData.value,false)
+
   applyLayerVisibility()
   nextTick(()=>{
     updateWindVisibility()
@@ -1269,6 +1313,130 @@ function setMapView(mode){
   })
 }
 function resetNorth(){map.easeTo({bearing:0,pitch:mapMode.value==='3d'?55:0,duration:500})}
+
+// ============================================================
+// 新增：地面路线规划相关函数
+// ============================================================
+
+// 从 GeoJSON 中提取所有坐标点
+function collectRouteCoordinates(geojson){
+  if(!geojson)return []
+  if(geojson.type==='FeatureCollection')return geojson.features.flatMap(feature=>collectRouteCoordinates(feature))
+  if(geojson.type==='Feature')return collectRouteCoordinates(geojson.geometry)
+  if(geojson.type==='LineString')return geojson.coordinates||[]
+  if(geojson.type==='MultiLineString')return (geojson.coordinates||[]).flat()
+  return []
+}
+
+// 在地图上渲染地面路线
+function renderGroundRoute(routeData,fitRoute=true){
+  if(!map?.isStyleLoaded()||!routeData)return
+  groundRouteData.value=routeData
+  groundRouteCoordinates.value=collectRouteCoordinates(routeData)
+  addSource('ground-traffic',routeData)
+  
+  // 路线外壳（描边）
+  if(!map.getLayer('ground-traffic-casing')){
+    map.addLayer({
+      id:'ground-traffic-casing',
+      type:'line',
+      source:'ground-traffic',
+      layout:{'line-cap':'round','line-join':'round'},
+      paint:{
+        'line-width':['interpolate',['linear'],['zoom'],8,7,14,11],
+        'line-color':'#071522',
+        'line-opacity':.9
+      }
+    })
+  }
+  
+  // 路线主体（带路况颜色）
+  if(!map.getLayer('ground-traffic')){
+    map.addLayer({
+      id:'ground-traffic',
+      type:'line',
+      source:'ground-traffic',
+      layout:{'line-cap':'round','line-join':'round'},
+      paint:{
+        'line-width':['interpolate',['linear'],['zoom'],8,4,14,7],
+        'line-color':['match',['get','level'],
+          'severe','#ff234b',
+          'heavy','#ff7a1a',
+          'moderate','#ffd638',
+          'low','#35d879',
+          'unknown','#49b7ff',
+          '#49b7ff'
+        ],
+        'line-opacity':.96
+      }
+    })
+  }
+  
+  applyLayerVisibility()
+  
+  // 聚焦路线
+  if(!fitRoute||!groundRouteCoordinates.value.length)return
+  const bounds=new mapboxgl.LngLatBounds()
+  groundRouteCoordinates.value.forEach(coordinate=>{
+    if(Array.isArray(coordinate)&&Number.isFinite(coordinate[0])&&Number.isFinite(coordinate[1]))bounds.extend(coordinate)
+  })
+  if(!bounds.isEmpty())map.fitBounds(bounds,{
+    padding:{top:110,right:90,bottom:110,left:90},
+    maxZoom:14.5,
+    duration:850
+  })
+}
+
+// 清除地面路线
+function clearGroundRoute(){
+  groundRouteData.value=null
+  groundRouteCoordinates.value=[]
+  map?.getSource('ground-traffic')?.setData(turf.featureCollection([]))
+}
+
+// 生成仿真地面路线（当API不可用时）
+function buildFallbackGroundRoute(from,to){
+  const midpoint=[(from[0]+to[0])/2,(from[1]+to[1])/2]
+  const distance=turf.distance(turf.point(from),turf.point(to),{units:'kilometers'})
+  const offset=Math.min(.018,Math.max(.003,distance*.0007))
+  const bearing=turf.bearing(turf.point(from),turf.point(to))
+  const firstGuidePoint=turf.destination(turf.point(from),distance*.3,bearing+7,{units:'kilometers'}).geometry.coordinates
+  const middleGuidePoint=turf.destination(turf.point(midpoint),Math.max(.4,distance*.08),bearing+90,{units:'kilometers'}).geometry.coordinates
+  const lastGuidePoint=turf.destination(turf.point(to),distance*.26,bearing+187,{units:'kilometers'}).geometry.coordinates
+  const coordinates=[
+    from,
+    [firstGuidePoint[0]+offset*.1,firstGuidePoint[1]],
+    middleGuidePoint,
+    [lastGuidePoint[0]-offset*.1,lastGuidePoint[1]],
+    to
+  ]
+  const level=trafficPeriod.value.factor>1.7?'severe':trafficPeriod.value.factor>1.4?'heavy':trafficPeriod.value.factor>1.1?'moderate':'low'
+  return turf.featureCollection(coordinates.slice(0,-1).map((coordinate,index)=>
+    turf.lineString([coordinate,coordinates[index+1]],{level,simulated:true,segmentIndex:index})
+  ))
+}
+
+// 切换配送模式（地面/低空）
+async function selectDeliveryMode(mode){
+  deliveryMode.value=mode
+  if(mode==='ground'){
+    if(groundRouteData.value&&groundRouteCoordinates.value.length){
+      renderGroundRoute(groundRouteData.value,true)
+    }else{
+      await refreshTraffic(true)
+    }
+  }else{
+    if(activeTask.value)showPlannedRoute(activeTask.value)
+    const route=airLine.value
+    if(route?.geometry?.coordinates?.length){
+      const bounds=new mapboxgl.LngLatBounds()
+      route.geometry.coordinates.forEach(coordinate=>bounds.extend(coordinate))
+      map?.fitBounds(bounds,{padding:100,maxZoom:14,duration:700})
+    }
+  }
+  applyLayerVisibility()
+}
+  
 function applyRotateMode(){
   if(!map)return
   rotateCleanup?.();rotateCleanup=null
@@ -1289,50 +1457,114 @@ function applyRotateMode(){
 function toggleRotate(){rotateMode.value=!rotateMode.value;applyRotateMode()}
 function showMessagePanel(){clearTimeout(messageHideTimer);showMessages.value=true}
 function hideMessagePanel(){clearTimeout(messageHideTimer);messageHideTimer=setTimeout(()=>showMessages.value=false,180)}
- function applyLayerVisibility(){
-   const pairs={coverage:['coverage'],restrictions:['restrictions'],weather:['weather-wind','weather-wind-3d-glow','weather-wind-3d','weather-wind-heads'],air:['air-glow','air-route','planned-flight-glow','planned-flight'],ground:['ground-traffic'],buildings:['buildings']}
-   Object.entries(pairs).forEach(([key,ids])=>ids.forEach(id=>map.getLayer(id)&&map.setLayoutProperty(id,'visibility',layerVisible.value[key]?'visible':'none')))
-   if(map.getLayer('weather-wind'))map.setLayoutProperty('weather-wind','visibility','none')
-   if(map.getLayer('weather-wind-3d-glow'))map.setLayoutProperty('weather-wind-3d-glow','visibility',!capacityPage.value&&layerVisible.value.weather&&mapMode.value==='3d'?'visible':'none')
-   if(map.getLayer('weather-wind-3d'))map.setLayoutProperty('weather-wind-3d','visibility',!capacityPage.value&&layerVisible.value.weather&&mapMode.value==='3d'?'visible':'none')
-   if(map.getLayer('weather-wind-heads'))map.setLayoutProperty('weather-wind-heads','visibility','none')
-   const flightPage=page.value==='flight',dispatchPage=page.value==='dispatch',groundPage=page.value==='groundMonitor'
-   ;['shared-flight-glow','shared-flight-route'].forEach(id=>map.getLayer(id)&&map.setLayoutProperty(id,'visibility',flightPage&&layerVisible.value.air?'visible':'none'))
-   ;['planned-flight-glow','planned-flight'].forEach(id=>map.getLayer(id)&&map.setLayoutProperty(id,'visibility',(flightPage||dispatchPage)&&layerVisible.value.air?'visible':'none'))
-   ;['air-glow','air-route'].forEach(id=>map.getLayer(id)&&map.setLayoutProperty(id,'visibility',dispatchPage&&layerVisible.value.air?'visible':'none'))
-   if(map.getLayer('ground-traffic'))map.setLayoutProperty('ground-traffic','visibility',(dispatchPage||groundPage)&&layerVisible.value.ground?'visible':'none')
-   if(map.getLayer('drone-altitude-column'))map.setLayoutProperty('drone-altitude-column','visibility',flightPage&&mapMode.value==='3d'?'visible':'none')
-   updateLabelScale()
-   updateWindVisibility()
- }
 
-async function refreshTraffic(){
-  if(!activeTask.value||!selectedSupplier.value)return
-  trafficLoading.value=true;trafficStatus.value='正在获取道路交通数据'
-  const a=selectedSupplier.value.coordinates.join(','),b=activeTask.value.destination.join(',')
+function applyLayerVisibility(){
+  if(!map?.isStyleLoaded())return
+  const flightPage=page.value==='flight'
+  const dispatchPage=page.value==='dispatch'
+  const groundPage=page.value==='groundMonitor'
+  const dispatchGroundVisible=dispatchPage&&dispatchStep.value===3&&deliveryMode.value==='ground'
+  const dispatchAirVisible=dispatchPage&&(dispatchStep.value<3||deliveryMode.value==='air')
+  
+  // 基础图层
+  const generalPairs={coverage:['coverage'],restrictions:['restrictions'],buildings:['buildings']}
+  Object.entries(generalPairs).forEach(([key,ids])=>ids.forEach(id=>{
+    if(map.getLayer(id))map.setLayoutProperty(id,'visibility',layerVisible.value[key]?'visible':'none')
+  }))
+  
+  // 天气图层
+  if(map.getLayer('weather-wind'))map.setLayoutProperty('weather-wind','visibility','none')
+  if(map.getLayer('weather-wind-3d'))map.setLayoutProperty(
+    'weather-wind-3d','visibility',
+    !capacityPage.value&&layerVisible.value.weather&&mapMode.value==='3d'?'visible':'none'
+  )
+  if(map.getLayer('weather-wind-heads'))map.setLayoutProperty('weather-wind-heads','visibility','none')
+  
+  // 飞行共享路线
+  ;['shared-flight-glow','shared-flight-route'].forEach(id=>{
+    if(map.getLayer(id))map.setLayoutProperty(id,'visibility',flightPage&&layerVisible.value.air?'visible':'none')
+  })
+  
+  // 计划路线
+  ;['planned-flight-glow','planned-flight'].forEach(id=>{
+    if(map.getLayer(id))map.setLayoutProperty(id,'visibility',(flightPage||dispatchAirVisible)&&layerVisible.value.air?'visible':'none')
+  })
+  
+  // 低空航线
+  ;['air-glow','air-route'].forEach(id=>{
+    if(map.getLayer(id))map.setLayoutProperty(id,'visibility',dispatchAirVisible&&layerVisible.value.air?'visible':'none')
+  })
+  
+  // ===== 新增：地面路线控制 =====
+  ;['ground-traffic-casing','ground-traffic'].forEach(id=>{
+    if(map.getLayer(id))map.setLayoutProperty(
+      id,'visibility',
+      (groundPage||dispatchGroundVisible)&&layerVisible.value.ground?'visible':'none'
+    )
+  })
+  
+  // 无人机高度柱
+  if(map.getLayer('drone-altitude-column'))map.setLayoutProperty(
+    'drone-altitude-column','visibility',
+    flightPage&&mapMode.value==='3d'?'visible':'none'
+  )
+  
+  updateLabelScale()
+  updateWindVisibility()
+}
+
+async function refreshTraffic(fitRoute=false){
+  if(!activeTask.value||!selectedSupplier.value){toast('请先选择任务和供给机构');return}
+  trafficLoading.value=true
+  trafficStatus.value='正在获取道路路径规划与交通数据'
+  const from=selectedSupplier.value.coordinates
+  const to=activeTask.value.destination
+  const fromText=from.join(','),toText=to.join(',')
   try{
-    const res=await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${a};${b}?geometries=geojson&overview=full&annotations=congestion&access_token=${mapboxgl.accessToken}`)
-    const json=await res.json(),route=json.routes?.[0];if(!route)throw Error('未返回路线')
-    const baseMinutes=Math.round(route.duration/60);groundMinutes.value=Math.max(baseMinutes,Math.round((route.distance/1000)/.55*trafficPeriod.value.factor));groundDistance.value=(route.distance/1000).toFixed(1)
-    const c=route.geometry.coordinates,con=route.legs[0]?.annotation?.congestion||[]
-    addSource('ground-traffic',turf.featureCollection(c.slice(0,-1).map((p,i)=>turf.lineString([p,c[i+1]],{level:con[i]||'unknown'}))))
-    if(!map.getLayer('ground-traffic'))map.addLayer({id:'ground-traffic',type:'line',source:'ground-traffic',paint:{'line-width':5,'line-color':['match',['get','level'],'severe','#ff234b','heavy','#ff7a1a','moderate','#ffd638','low','#35d879','#71849c']}})
-    trafficStatus.value=`${trafficPeriod.value.name}·${trafficPeriod.value.level}｜模拟修正ETA ${groundMinutes.value}分钟 · ${groundDistance.value}km · ${new Date().toLocaleTimeString()}更新`
+    const url=`https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${fromText};${toText}?alternatives=false&continue_straight=true&geometries=geojson&overview=full&steps=true&annotations=congestion,duration,distance&language=zh-Hans&access_token=${mapboxgl.accessToken}`
+    const response=await fetch(url)
+    if(!response.ok)throw Error(`路径规划接口状态码：${response.status}`)
+    const json=await response.json(),route=json.routes?.[0]
+    if(!route?.geometry?.coordinates?.length)throw Error('路径规划接口没有返回有效路线')
+    const coordinates=route.geometry.coordinates
+    const congestion=route.legs?.[0]?.annotation?.congestion||[]
+    const annotationDuration=route.legs?.[0]?.annotation?.duration||[]
+    const annotationDistance=route.legs?.[0]?.annotation?.distance||[]
+    const segments=coordinates.slice(0,-1).map((coordinate,index)=>turf.lineString(
+      [coordinate,coordinates[index+1]],
+      {
+        level:congestion[index]||'unknown',
+        duration:Number(annotationDuration[index]||0),
+        distance:Number(annotationDistance[index]||0),
+        segmentIndex:index,
+        simulated:false
+      }
+    ))
+    const routeGeoJSON=turf.featureCollection(segments)
+    const apiMinutes=Math.max(1,Math.round(route.duration/60))
+    const routeKilometers=route.distance/1000
+    const periodCorrection=trafficPeriod.value.factor>=1.8?1.08:trafficPeriod.value.factor>=1.6?1.05:trafficPeriod.value.factor<=.9?.96:1
+    groundMinutes.value=Math.max(1,Math.round(apiMinutes*periodCorrection))
+    groundDistance.value=routeKilometers.toFixed(1)
+    renderGroundRoute(routeGeoJSON,fitRoute||deliveryMode.value==='ground')
+    trafficStatus.value=`${trafficPeriod.value.name}·${trafficPeriod.value.level}｜道路规划ETA ${groundMinutes.value}分钟 · ${groundDistance.value}km · ${new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}更新`
     drawChart()
-  }catch(e){
-    const from=selectedSupplier.value.coordinates,to=activeTask.value.destination
-    const direct=turf.distance(turf.point(from),turf.point(to),{units:'kilometers'}),roadKm=direct*1.38
-    groundDistance.value=roadKm.toFixed(1);groundMinutes.value=Math.round(roadKm/0.55*trafficPeriod.value.factor)
-    const level=trafficPeriod.value.factor>1.7?'severe':trafficPeriod.value.factor>1.4?'heavy':trafficPeriod.value.factor>1.1?'moderate':'low'
-    addSource('ground-traffic',turf.featureCollection([turf.lineString([from,[(from[0]+to[0])/2+.002,(from[1]+to[1])/2-.001],to],{level})]))
-    if(!map.getLayer('ground-traffic'))map.addLayer({id:'ground-traffic',type:'line',source:'ground-traffic',paint:{'line-width':5,'line-color':['match',['get','level'],'severe','#ff234b','heavy','#ff7a1a','moderate','#ffd638','low','#35d879','#71849c']}})
-    trafficStatus.value=`${trafficPeriod.value.name}·${trafficPeriod.value.level}｜仿真车流ETA ${groundMinutes.value}分钟（实时接口不可用）`
+  }catch(error){
+    console.warn('真实道路路径规划失败，启用仿真路线：',error)
+    const directDistance=turf.distance(turf.point(from),turf.point(to),{units:'kilometers'})
+    const simulatedRoadKilometers=directDistance*1.38
+    groundDistance.value=simulatedRoadKilometers.toFixed(1)
+    groundMinutes.value=Math.max(1,Math.round(simulatedRoadKilometers/.55*trafficPeriod.value.factor))
+    const fallbackRoute=buildFallbackGroundRoute(from,to)
+    renderGroundRoute(fallbackRoute,fitRoute||deliveryMode.value==='ground')
+    trafficStatus.value=`${trafficPeriod.value.name}·${trafficPeriod.value.level}｜仿真道路规划ETA ${groundMinutes.value}分钟 · ${groundDistance.value}km（实时路径接口不可用）`
     drawChart()
   }finally{
     trafficLoading.value=false
-    deliveryMode.value=(weatherAssessment.value.level==='禁止放飞'||Number(groundMinutes.value)<Number(airMinutes.value))?'ground':'air'
+    applyLayerVisibility()
   }
 }
+  
 function drawChart(){
   if(!chartEl.value)return;chart ||= echarts.init(chartEl.value)
   chart.setOption({grid:{left:30,right:10,top:24,bottom:25},xAxis:{type:'category',data:['地面配送','低空配送'],axisLabel:{color:'#8ca5c5'}},yAxis:{type:'value',axisLabel:{color:'#8ca5c5'},splitLine:{lineStyle:{color:'#1c3858'}}},series:[{type:'bar',data:[groundMinutes.value||30,airMinutes.value],itemStyle:{color:p=>p.dataIndex?'#35dff4':'#ff9b41'},label:{show:true,position:'top',color:'#d9efff',formatter:'{c}min'}}]})
@@ -1616,7 +1848,10 @@ onBeforeUnmount(()=>{clearInterval(flightTimer);clearInterval(groundTimer);clear
         <template v-else-if="page==='inventory'">
           <em>SHARED INVENTORY</em><h1>医疗物资共享网络</h1><p>医院既可以是需求方，也可以在库存允许时成为供给方。库存由各机构自行维护。</p>
           <div v-for="(s,index) in sortedInventory" :key="s.orgId" class="inventory" :class="{mine:s.orgId===loginOrg}"><div><b>{{s.org}} <em v-if="index===0&&s.orgId===loginOrg">本机构</em></b><span :class="{online:s.online}">{{s.online?'在线':'离线'}}</span></div><p v-for="(n,k) in s.items" :key="k"><span>{{k}}</span><b>{{n}}</b><i v-if="s.orgId===loginOrg"><button @click="changeStock(s,k,-1)">−</button><button @click="changeStock(s,k,1)">＋</button></i></p></div>
-          <h3>待供给确认</h3><div v-for="t in tasks.filter(x=>x.status==='等待供给确认'&&t.supplierId===loginOrg)" :key="t.id" class="approval"><b>{{t.requester}}申请{{t.material}}</b><p>{{t.amount}}{{t.unit}} · {{t.priority}} · {{t.note}}</p><div><button class="primary" @click="supplierDecision(t,true)">同意分配</button><button class="secondary" @click="supplierDecision(t,false)">无法提供</button></div></div>
+          <h3>待供给确认</h3><div v-for="t in tasks.filter(x=>x.status==='等待供给确认'&&t.supplierId===loginOrg)" :key="t.id" class="approval"><b>{{t.requester}}申请{{t.material}}</b><p>{{t.amount}}{{t.unit}} · {{t.priority}} · {{t.note}}</p><div><button class="primary" @click="supplierDecision(t,true)">同意分配</button>
+            
+            <button class="secondary" :disabled="trafficLoading" @click="refreshTraffic(deliveryMode==='ground')">
+  {{trafficLoading?'正在规划道路路线':groundRouteData?'重新规划并评价道路交通':'获取并评价道路交通'}}</button></div></div>
         </template>
         <template v-else-if="page==='supplyTodo'">
           <em>SUPPLY APPROVAL</em><h1>本机构供给待办</h1><p>这里只显示明确向当前医院或血液机构提出的申请。确认前，调度中心不能继续处理。</p>
@@ -1676,7 +1911,16 @@ onBeforeUnmount(()=>{clearInterval(flightTimer);clearInterval(groundTimer);clear
             <template v-else-if="dispatchStep===2"><h3>02 无人机调机匹配</h3><p>系统推荐仅供参考，不会自动选中。请调度员明确点击无人机，系统才根据该无人机所在站点生成完整路线。当前批次估算载荷：<b>{{batchPayload}}kg</b>。</p><div v-for="(d,index) in candidateDrones.slice(0,5)" :key="d.id" class="choice" :class="{selected:selectedDroneId===d.id,disabled:!d.eligible}" @click="chooseDrone(d)"><b>{{d.id}} · {{d.baseName}} <em v-if="index===0&&d.eligible&&d.available" class="recommended">系统推荐</em><em v-else-if="d.shareSelected" class="recommended">联运共用</em></b><span>载重{{d.load}}kg · 电量{{d.battery}}% · 调机{{d.reposition.toFixed(1)}}km · 配送{{d.delivery.toFixed(1)}}km</span><i>{{d.reservation&&!d.shareSelected?'已分配给 '+d.reservation.id+'，不可重复派遣':d.shareSelected?'将与 '+d.reservation.id+' 共用':selectedDroneId===d.id?'已选择·路线已按本机位置生成':'点击选择后生成路线'}}</i></div><div class="coroute"><h3>多任务协调与联运</h3><p>已分配无人机但尚未起飞的任务也会显示。选择后，本任务将明确加入其联运批次，共同使用同一架无人机。</p><div v-for="t in coRouteCandidates.slice(0,8)" :key="t.id" :class="{ok:t.compatible,selected:selectedBatchTaskIds.includes(t.id),manual:!t.compatible}" @click="selectedBatchTaskIds.includes(t.id)?selectedBatchTaskIds.splice(selectedBatchTaskIds.indexOf(t.id),1):selectedBatchTaskIds.push(t.id)"><b><input type="checkbox" :checked="selectedBatchTaskIds.includes(t.id)" @click.stop="selectedBatchTaskIds.includes(t.id)?selectedBatchTaskIds.splice(selectedBatchTaskIds.indexOf(t.id),1):selectedBatchTaskIds.push(t.id)"> {{t.id}} · {{t.requester}}</b><span>{{t.supplier||'供给方待匹配'}} · 相对绕行{{t.detourRatio}}% <strong v-if="t.reservedDroneId">· 已占用 {{t.reservedDroneId}}</strong></span><i>{{t.reservedDroneId?'起飞前可合并：与本任务共用 '+t.reservedDroneId:(t.compatible?'系统推荐联运':'人工协调：'+t.reason)}}</i></div><small v-if="!coRouteCandidates.length">当前没有其他待协调任务。需要至少两家医院提交任务后才会出现任务选项。</small></div>
               <button class="secondary back-step" @click="dispatchStep = 1" style="margin-top: 8px;">← 返回上一步</button>
               <button class="primary" :disabled="!selectedDroneId" @click="confirmDrone">确认所选运力{{selectedBatchTaskIds.length?'与协调批次':''}}并分析路线</button></template>
-            <template v-else-if="dispatchStep===3"><h3>03 地面与低空方案对比</h3><div class="route-cards"><div><b>地面配送</b><strong>{{groundMinutes||'--'}}min</strong><span>{{groundDistance||'--'}}km · {{trafficStatus}}</span></div><div><b>低空安全航线</b><strong>{{airMinutes}}min</strong><span>{{airKm.toFixed(1)}}km · 高度120m · 速度约54km/h</span></div></div><button class="secondary" @click="refreshTraffic">{{trafficLoading?'正在更新':'获取并评价道路交通'}}</button><div ref="chartEl" class="chart"></div><div class="weather-check" :class="weatherAssessment.className"><div><b>低空气象安全检查</b><strong>{{weatherAssessment.level}}</strong></div><p>{{weatherAssessment.text}}</p><div class="weather-points"><span v-for="w in routeWeather" :key="w.name"><b>{{w.name}}</b>{{w.windSpeed}}m/s · {{w.precipitation}}mm · {{w.visibility}}km</span></div><small>{{routeWeather[0]?.source||weather.source}} · 使用120米高度风场</small><button @click="analyzeRouteWeather">{{weatherLoading?'检查中':'重新检查航线天气'}}</button></div><div class="airspace-check" :class="{blocked:directRouteBlocked}"><b>空域与建筑安全检查</b><span>{{directRouteBlocked?'最短直飞路线穿越禁飞区，已禁止使用并生成外侧绕行航线。':'直飞路线未与当前禁飞区相交。'}}</span><small>三维运行航高120m；建筑图层按高度显示，航线采用安全走廊并避让高层建筑风险区域。</small></div><div class="transport-recommend" :class="{ground:transportAssessment.recommend.includes('地面')}"><b>{{transportAssessment.recommend}}</b><strong>预计节省 {{transportAssessment.saving}} 分钟 · 时效变化 {{transportAssessment.ratio}}%</strong><p>{{transportAssessment.text}}</p></div><div class="mode-choice"><button :class="{active:deliveryMode==='ground'}" @click="deliveryMode='ground'">采用地面车辆配送</button><button :class="{active:deliveryMode==='air'}" @click="deliveryMode='air'">采用低空无人机配送</button></div>
+            <template v-else-if="dispatchStep===3"><h3>03 地面与低空方案对比</h3><div class="route-cards"><div><b>地面配送</b><strong>{{groundMinutes||'--'}}min</strong><span>{{groundDistance||'--'}}km · {{trafficStatus}}</span></div><div><b>低空安全航线</b><strong>{{airMinutes}}min</strong><span>{{airKm.toFixed(1)}}km · 高度120m · 速度约54km/h</span></div></div><button class="secondary" @click="refreshTraffic">{{trafficLoading?'正在更新':'获取并评价道路交通'}}</button><div ref="chartEl" class="chart"></div><div class="weather-check" :class="weatherAssessment.className"><div><b>低空气象安全检查</b><strong>{{weatherAssessment.level}}</strong></div><p>{{weatherAssessment.text}}</p><div class="weather-points"><span v-for="w in routeWeather" :key="w.name"><b>{{w.name}}</b>{{w.windSpeed}}m/s · {{w.precipitation}}mm · {{w.visibility}}km</span></div><small>{{routeWeather[0]?.source||weather.source}} · 使用120米高度风场</small><button @click="analyzeRouteWeather">{{weatherLoading?'检查中':'重新检查航线天气'}}</button></div><div class="airspace-check" :class="{blocked:directRouteBlocked}"><b>空域与建筑安全检查</b><span>{{directRouteBlocked?'最短直飞路线穿越禁飞区，已禁止使用并生成外侧绕行航线。':'直飞路线未与当前禁飞区相交。'}}</span><small>三维运行航高120m；建筑图层按高度显示，航线采用安全走廊并避让高层建筑风险区域。</small></div><div class="transport-recommend" :class="{ground:transportAssessment.recommend.includes('地面')}"><b>{{transportAssessment.recommend}}</b><strong>预计节省 {{transportAssessment.saving}} 分钟 · 时效变化 {{transportAssessment.ratio}}%</strong><p>{{transportAssessment.text}}</p></div>
+             
+              <div class="mode-choice">
+  <button :class="{active:deliveryMode==='ground'}" :disabled="trafficLoading" @click="selectDeliveryMode('ground')">
+    {{trafficLoading&&deliveryMode==='ground'?'正在规划地面路线':'采用地面车辆配送'}}
+  </button>
+  <button :class="{active:deliveryMode==='air'}" @click="selectDeliveryMode('air')">
+    采用低空无人机配送
+  </button>
+</div>
               <button class="secondary back-step" @click="dispatchStep = 2" style="margin-top: 8px;">← 返回上一步</button>
               <button v-if="deliveryMode==='air'" class="primary" :disabled="!groundMinutes||weatherAssessment.level==='禁止放飞'" @click="issueTask">{{weatherAssessment.level==='禁止放飞'?'天气超限，禁止下发':'下发无人机与安全绕行航线'}}</button><button v-else class="primary ground-btn" :disabled="!groundMinutes" @click="issueGroundTask">通知供给机构安排地面车辆</button></template>
             <template v-else><h3>04 调度方案已下发</h3><div class="summary"><b>{{activeTask.deliveryMode||'低空无人机'}}</b><span>{{activeTask.droneId?activeTask.droneId+' · ':''}}{{activeTask.status}}</span></div><button v-if="activeTask.droneId&&activeTask.telemetry" class="primary" @click="openFlightMonitor(activeTask)">进入独立飞行监控</button><button v-if="activeTask.deliveryMode==='地面车辆'" class="ground-btn primary" @click="openGroundMonitor(activeTask)">查看地面配送状态</button><button class="secondary" @click="page='tasks'">返回任务中心</button></template>
