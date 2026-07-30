@@ -978,3 +978,10 @@ aside select,
   border-top: 1px dashed #1c4058;
   margin-top: 4px;
 }
+
+
+/* ===== 地面路线图例样式 ===== */
+.legend .route.ground {
+  background: linear-gradient(90deg, #35d879, #ffd638, #ff7a1a, #ff234b);
+  width: 30px !important;
+}
