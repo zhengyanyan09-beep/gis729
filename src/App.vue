@@ -44,6 +44,7 @@ const selectedSupplierId = ref('')
 const selectedDroneId = ref('')
 const selectedRoute = ref('safe')
 const selectedBatchTaskIds = ref([])
+const supplierListExpanded = ref(false)
 const deliveryMode = ref('air')
 const trafficLoading = ref(false)
 const trafficStatus = ref('等待获取道路交通数据')
@@ -1639,8 +1640,38 @@ onBeforeUnmount(()=>{clearInterval(flightTimer);clearInterval(groundTimer);clear
           <template v-else>
             <div class="steps"><span v-for="n in 4" :key="n" :class="{active:dispatchStep>=n}">{{n}}</span></div>
             <div class="summary"><b>{{activeTask.requester}}</b><span>{{activeTask.material}} {{activeTask.amount}}{{activeTask.unit}} · {{activeTask.priority}}</span><small>{{activeTask.status}}</small></div>
+            //<template v-if="activeTask.status==='等待调度匹配供给方'">
+              //<h3>01 辅助匹配供给机构</h3><p>系统按照物资库存、在线状态和空间距离评分推荐；调度中心只能发送申请，不能替供给方确认。</p><div v-for="(s,index) in candidateSuppliers" :key="s.orgId" class="choice" :class="{selected:selectedSupplierId===s.orgId,disabled:!s.eligible}" @click="s.eligible&&(selectedSupplierId=s.orgId)"><b>{{s.org}} <em v-if="index===0&&s.eligible" class="recommended">推荐供给方</em></b><span>库存 {{s.stock}} · 距离 {{s.distance.toFixed(1)}}km · 综合评分 {{s.score}}</span><i>{{s.eligible?'可发起申请':'不可用'}}</i></div><button class="primary" @click="assignSupplier">向推荐机构发送供给确认申请</button>
+            //</template>
             <template v-if="activeTask.status==='等待调度匹配供给方'">
-              <h3>01 辅助匹配供给机构</h3><p>系统按照物资库存、在线状态和空间距离评分推荐；调度中心只能发送申请，不能替供给方确认。</p><div v-for="(s,index) in candidateSuppliers" :key="s.orgId" class="choice" :class="{selected:selectedSupplierId===s.orgId,disabled:!s.eligible}" @click="s.eligible&&(selectedSupplierId=s.orgId)"><b>{{s.org}} <em v-if="index===0&&s.eligible" class="recommended">推荐供给方</em></b><span>库存 {{s.stock}} · 距离 {{s.distance.toFixed(1)}}km · 综合评分 {{s.score}}</span><i>{{s.eligible?'可发起申请':'不可用'}}</i></div><button class="primary" @click="assignSupplier">向推荐机构发送供给确认申请</button>
+              <h3>01 辅助匹配供给机构</h3>
+              <p>系统按照物资库存、在线状态和空间距离评分推荐；调度中心只能发送申请，不能替供给方确认。</p>
+
+  <!-- ===== 供给方列表（带折叠功能） ===== -->
+              <div class="supplier-list-header" @click="supplierListExpanded = !supplierListExpanded">
+                <span>
+                  <b>候选供给方</b>
+                  <i class="count">{{candidateSuppliers.length}}家</i>
+                </span>
+                <span class="toggle-icon">{{supplierListExpanded ? '▼ 收起' : '▶ 展开'}}</span>
+              </div>
+
+              <div v-for="(s,index) in (supplierListExpanded ? candidateSuppliers : candidateSuppliers.slice(0, 3))" 
+                 :key="s.orgId" 
+                 class="choice" 
+                 :class="{selected:selectedSupplierId===s.orgId,disabled:!s.eligible}" 
+                 @click="s.eligible && (selectedSupplierId=s.orgId) && (supplierListExpanded = false)">
+                <b>{{s.org}} <em v-if="index===0&&s.eligible" class="recommended">推荐供给方</em></b>
+                <span>库存 {{s.stock}} · 距离 {{s.distance.toFixed(1)}}km · 综合评分 {{s.score}}</span>
+                <i>{{s.eligible?'可发起申请':'不可用'}}</i>
+              </div>
+
+  <!-- 折叠时显示还有多少家 -->
+              <div v-if="!supplierListExpanded && candidateSuppliers.length > 3" class="more-hint">
+                还有 {{candidateSuppliers.length - 3}} 家供给方，点击上方展开查看
+              </div>
+
+              <button class="primary" @click="assignSupplier">向推荐机构发送供给确认申请</button>
             </template>
             <template v-else-if="activeTask.status==='等待供给确认'"><div class="supply-lock"><b>等待供给方确认</b><span>申请已发送至 {{activeTask.supplier}}。在该机构明确同意前，调度中心无法受理、选择无人机或规划航线。</span><i>当前没有任何可执行的调度按钮</i></div></template>
             <template v-else-if="dispatchStep===1"><h3>01 受理任务</h3><p>供给方已确认物资，调度中心可以开始运力与航线分析。</p><button class="primary" @click="acceptDispatch">受理并开始调度</button></template>
