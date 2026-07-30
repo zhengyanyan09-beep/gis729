@@ -1640,9 +1640,7 @@ onBeforeUnmount(()=>{clearInterval(flightTimer);clearInterval(groundTimer);clear
           <template v-else>
             <div class="steps"><span v-for="n in 4" :key="n" :class="{active:dispatchStep>=n}">{{n}}</span></div>
             <div class="summary"><b>{{activeTask.requester}}</b><span>{{activeTask.material}} {{activeTask.amount}}{{activeTask.unit}} · {{activeTask.priority}}</span><small>{{activeTask.status}}</small></div>
-            //<template v-if="activeTask.status==='等待调度匹配供给方'">
-              //<h3>01 辅助匹配供给机构</h3><p>系统按照物资库存、在线状态和空间距离评分推荐；调度中心只能发送申请，不能替供给方确认。</p><div v-for="(s,index) in candidateSuppliers" :key="s.orgId" class="choice" :class="{selected:selectedSupplierId===s.orgId,disabled:!s.eligible}" @click="s.eligible&&(selectedSupplierId=s.orgId)"><b>{{s.org}} <em v-if="index===0&&s.eligible" class="recommended">推荐供给方</em></b><span>库存 {{s.stock}} · 距离 {{s.distance.toFixed(1)}}km · 综合评分 {{s.score}}</span><i>{{s.eligible?'可发起申请':'不可用'}}</i></div><button class="primary" @click="assignSupplier">向推荐机构发送供给确认申请</button>
-            //</template>
+            
             <template v-if="activeTask.status==='等待调度匹配供给方'">
               <h3>01 辅助匹配供给机构</h3>
               <p>系统按照物资库存、在线状态和空间距离评分推荐；调度中心只能发送申请，不能替供给方确认。</p>
