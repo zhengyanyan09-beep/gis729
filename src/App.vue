@@ -1847,7 +1847,9 @@ onBeforeUnmount(()=>{clearInterval(flightTimer);clearInterval(groundTimer);clear
 
         <template v-else-if="page==='inventory'">
           <em>SHARED INVENTORY</em><h1>医疗物资共享网络</h1><p>医院既可以是需求方，也可以在库存允许时成为供给方。库存由各机构自行维护。</p>
-          <div v-for="(s,index) in sortedInventory" :key="s.orgId" class="inventory" :class="{mine:s.orgId===loginOrg}"><div><b>{{s.org}} <em v-if="index===0&&s.orgId===loginOrg">本机构</em></b><span :class="{online:s.online}">{{s.online?'在线':'离线'}}</span></div><p v-for="(n,k) in s.items" :key="k"><span>{{k}}</span><b>{{n}}</b><i v-if="s.orgId===loginOrg"><button @click="changeStock(s,k,-1)">−</button><button @click="changeStock(s,k,1)">＋</button></i></p></div>
+          
+          <div v-for="(s,idx) in sortedInventory" :key="s.orgId" class="inventory" :class="{mine:s.orgId===loginOrg}">
+            <div><b>{{s.org}} <em v-if="idx===0&&s.orgId===loginOrg">本机构</em></b><span :class="{online:s.online}">{{s.online?'在线':'离线'}}</span></div><p v-for="(n,k) in s.items" :key="k"><span>{{k}}</span><b>{{n}}</b><i v-if="s.orgId===loginOrg"><button @click="changeStock(s,k,-1)">−</button><button @click="changeStock(s,k,1)">＋</button></i></p></div>
           <h3>待供给确认</h3><div v-for="t in tasks.filter(x=>x.status==='等待供给确认'&&t.supplierId===loginOrg)" :key="t.id" class="approval"><b>{{t.requester}}申请{{t.material}}</b><p>{{t.amount}}{{t.unit}} · {{t.priority}} · {{t.note}}</p><div><button class="primary" @click="supplierDecision(t,true)">同意分配</button>
             
             <button class="secondary" :disabled="trafficLoading" @click="refreshTraffic(deliveryMode==='ground')">
